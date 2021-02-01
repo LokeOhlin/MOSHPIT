@@ -1,0 +1,2 @@
+RTOBJ += RuntimeParsInit.o
+

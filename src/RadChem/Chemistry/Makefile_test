@@ -1,0 +1,15 @@
+FLAGS = -DCHEMISTRYNETWORK=5 -g -r8 -traceback
+
+FC = mpiifort $(FLAGS)
+
+OBJS  = coolinmo.o cheminmo.o spline.o cool_func.o photoinit_ism.o \
+         dvode.o evolve_abundances.o rate_eq.o jac.o cool_util.o \
+         const_rates.o validate_rates.o calc_shield_test.o test_harness.o
+
+
+#OBJS  = coolinmo.o cheminmo.o spline.o cool_func.o photoinit_ism.o \
+#         dvode.o evolve_abundances.o rate_eq_simple.o jac.o cool_util.o \
+#         const_rates.o validate_rates.o calc_shield_test.o test_harness.o
+
+test: $(OBJS)
+	$(FC) -o test $(OBJS)

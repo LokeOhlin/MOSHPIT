@@ -1,0 +1,2 @@
+INITOBJ += initMethods.o
+

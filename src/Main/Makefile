@@ -1,0 +1,2 @@
+MAINOBJ += moshPit.o
+

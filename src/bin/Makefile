@@ -1,0 +1,69 @@
+CCOMP = gcc
+CFLAGS = -DuseChemistry -Wall
+LIBS = -lm -lgfortran -lquadmath -lstdc++
+CDEPS =
+
+FCOMP = gfortran
+#FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 -DDEBUG_EVOLVE
+FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 
+FDEPS =
+OBJ  = 
+PATHS = 
+
+FLAGS = -g
+
+VPATH = ../Main:../Init:../c_general/:../IO:../Hydro:../RadChem:../RadChem/Chemistry:../Runtime
+# Code stuff
+
+# Each directory determines what object it thinks it needs
+CGENOBJ = 
+include ../c_general/Makefile
+CDEPS += -I../c_general/
+
+HYDROBJ = 
+include ../Hydro/Makefile
+CDEPS += -I../Hydro/
+
+CHEMOBJ = 
+include ../RadChem/Chemistry/Makefile
+FDEPS += -I../RadChem/Chemistry/
+include ../RadChem/Makefile
+CDEPS += -I../RadChem/
+
+IOOBJ   = 
+include ../IO/Makefile
+CDEPS += -I../IO/
+
+INITOBJ   = 
+include ../Init/Makefile
+CDEPS += -I../Init/
+
+RTOBJ   = 
+include ../Runtime/Makefile
+CDEPS += -I../Runtime/
+
+MAINOBJ = 
+include ../Main/Makefile
+
+
+# Gather modules
+OBJ += $(CHEMOBJ)
+OBJ += $(CGENOBJ)
+OBJ += $(MAINOBJ)
+OBJ += $(HYDROBJ)
+OBJ += $(IOOBJ)
+OBJ += $(RTOBJ)
+OBJ += $(INITOBJ)
+CFLAGS += $(CDEPS)
+FFLAGS += $(FDEPS)
+.SUFFIXES: .c .F90 .F .o 
+%.o: %.F
+	$(FCOMP) -c -o $@ $< $(FLAGS) $(FFLAGS)
+%.o: %.F90
+	$(FCOMP) -c -o $@ $< $(FLAGS) $(FFLAGS)
+%.o: %.c
+	$(CCOMP) -c -o $@ $< $(FLAGS) $(CFLAGS)
+moshpit: $(OBJ)
+	$(CCOMP) -o $@ $^ $(FLAGS) $(CFLAGS) $(LIBS) $(FFLAGS)
+clean :
+	rm -f $(OBJPATH)*.o
