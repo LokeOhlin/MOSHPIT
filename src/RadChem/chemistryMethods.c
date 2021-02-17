@@ -7,7 +7,9 @@
 #include "hydro.h"
 #include "radchem.h"
 #include "cgeneral.h"
-
+#ifdef useDust
+    #include "dust.h"
+#endif
 
 int doChemistryStep(double dt, double *dt_chem){
     int ierr;
@@ -24,6 +26,12 @@ int doChemistryStep(double dt, double *dt_chem){
     double maxIon_Change;
     double Tdust, fshield_CO, fshield_H2, Av_mean, chi_mean, divv, redshift, tphoto,energy; 
     double dt_temp, sumAbs, sum_abs_est, sum_abs;
+#ifdef useDust
+    double rhoDust, rhoDustNew, rpars[2];
+    int ipars[2];
+#endif
+
+
     getrealchemistrypar("ch_max_ion_frac_change", &maxIon_Change);
     // If we want radiation 
     setRadiationData(radData, dt);
@@ -69,10 +77,19 @@ int doChemistryStep(double dt, double *dt_chem){
         specData[4] = xCp;
         
         volcell = vol[icell];
+#ifdef useDust        
+        // Set cell data in dust arrays
+        // Needs to be done before radiative transfer
+        ierr = setBinsCell(icell, &rhoDust);
+#endif
         // calculate cell absorption
         
         cellAbsorption(radData, specData, numd, Temp, dr[icell], volcell, dt, absData);
         
+#ifdef useDust
+        ierr = dustCell(rpars, ipars, dt);
+        ierr = getBinsCell(icell, &rhoDustNew);
+#endif
         // get absorption variables
         EtotPe    = absData[0]/(4*M_PI*pow((rs[icell]),2)); //make into flux. take value at centre of cell
         
@@ -93,7 +110,7 @@ int doChemistryStep(double dt, double *dt_chem){
         Habs_est  = absData[10];
         H2abs_est = absData[11];  
 
-        
+
         // Get dust temperature for chemistry
         // Is not advected, but its set to equilibrium anyways, just need initial guess
 
@@ -117,22 +134,12 @@ int doChemistryStep(double dt, double *dt_chem){
         redshift = 0;
         tphoto   = 0;
 
-        //if(icell == 2){
-        //    printf("%d, %.4e, %.4e, %.4e, %.4e, %.4e \n", icell, xH2, xHp, xCO, energy, numd);
-        //    printf("%d, %.4e, %.4e, %.4e, %.4e, %.4e, %.4e, %.4e \n", icell, phih, hvphih, phih2, hvphih2, kUV, EtotPe, DustEabs);
-        //}
-
         // TODO  make this interface more general... this might be comiler specific
-        //printf("%d, %.4e, %.4e, %.4e\n", icell, rho, vel, etot);
-        //printf("%d, %.4e, %.4e, %.4e, %.4e\n", icell, xH2, xHp, xCO, xCp);
         evolve_abundances_(&dt, &dr[icell], &numd, &divv, &energy, &redshift, 
                            non_eq_species, &fshield_H2, &fshield_CO, &Av_mean, 
                            &chi_mean, &Tdust, &phih, &hvphih, &phih2, &hvphih2, &kUV,
                            &EtotPe, &tphoto, &NionH0, &NdisH2, &DustEabs);  
     
-        //if(icell == 2){
-        //    printf("%d   %.4e   %.4e \n", icell, NionH0*volcell, NdisH2*volcell);
-        //}
         sum_abs += NionH0*volcell;
         sum_abs_est += Habs_est; 
         // Unpack results of chemistry integration

@@ -140,6 +140,7 @@ int fixState(){
         }
 #endif 
     }
+    return 1;
 }
 
 double minmod(double a, double b){
@@ -170,13 +171,13 @@ double maxmod(double a, double b){
 }
 int getTVDSlopes(double *dq, double *dr, double dt){
     int icell, idx, idxm, idxp, ivar;
-    double vdtdx, dcen, dlft, drgt, slope, sigm1, sigm2;
+    double dlft, drgt, slope, sigm1, sigm2;
+
     // only need slopes on the first ghost cells 
     for(icell = 1; icell < NCELLS-1; icell++){
         idx = nvar*icell;
         idxp = nvar*(icell+1);
         idxm = nvar*(icell-1);
-        vdtdx = pstate[idx + 1 ]*dt/dr[icell];
         for(ivar = 0; ivar < nvar; ivar++){
             // Superbee slope limiter
             dlft = (pstate[idx  + ivar] - pstate[idxm +ivar])/dr[icell];
@@ -204,7 +205,7 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
     double qi , dqix , Sqi;
     double dtdx;
     // Geometric terms
-    double twooR, drp, drm, geoPres;
+    double twooR, drp, drm;
     for(icell = 1; icell < NCELLS-1; icell++){
         dtdx = dt/dr[icell];
         idx = nvar*icell;
@@ -237,9 +238,6 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             drp= rs[icell] + dr[icell]/2;
             drm= rs[icell] - dr[icell]/2;
             twooR = 2/rs[icell];
-            // Pressure fix so that constant pressure => static
-            geoPres = 3*(drp*drp-drm*drm)/(drp*drp*drp-drm*drm*drm)*pre;
-
 
             // add geometric source terms to left and right states
             qM[idx]     = qM[idx]     - rho*vel*twooR * 0.5*dt;
@@ -280,13 +278,13 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
     }
     return 1;  
 }
-int getHLLCFlux(double *qL, double *qR, double  *flux) {
-    double rhoL, velL, preL, varL, etotL, eL; 
-    double rhoR, velR, preR, varR, etotR, eR;
-    double rho0, vel0, pre0, var0, etot0, e0;
+int getHLLCFlux(double *qL, double *qR, double*flux) {
+    double rhoL, velL, preL, etotL, eL; 
+    double rhoR, velR, preR, etotR, eR;
+    double rho0, vel0, pre0, var0, etot0;
     double velS, preS;
-    double rhoSL, etotSL, eSL;
-    double rhoSR, etotSR, eSR;
+    double rhoSL, etotSL;
+    double rhoSR, etotSR;
     double SL, SR;
     double entho;
     double cfastL, rcL;
@@ -328,12 +326,12 @@ int getHLLCFlux(double *qL, double *qR, double  *flux) {
     // left star states
     rhoSL  = rhoL*(SL-velL)                           /(SL-velS);
     etotSL =     ((SL-velL)*etotL-preL*velL+preS*velS)/(SL-velS);
-    eSL    =   eL*(SL-velL)                           /(SL-velS); 
+    //eSL    =   eL*(SL-velL)                           /(SL-velS); 
     
     // right star states
     rhoSR  = rhoR*(SR-velR)                           /(SR-velS);
     etotSR =     ((SR-velR)*etotR-preR*velR+preS*velS)/(SR-velS);
-    eSR    =   eR*(SR-velR)                           /(SR-velS); 
+    //eSR    =   eR*(SR-velR)                           /(SR-velS); 
 
     // determine solution
     if(SL > 0){
@@ -341,25 +339,25 @@ int getHLLCFlux(double *qL, double *qR, double  *flux) {
         vel0  = velL;
         pre0  = preL;
         etot0 = etotL;
-        e0    = eL; 
+        //e0    = eL; 
     } else if(velS  > 0){
         rho0  = rhoSL;
         vel0  = velS;
         pre0  = preS;
         etot0 = etotSL;
-        e0    = eSL;
+        //e0    = eSL;
     } else if(SR > 0){
         rho0  = rhoSR;
         vel0  = velS;
         pre0  = preS;
         etot0 = etotSR;
-        e0    = eSR; 
+        //e0    = eSR; 
     } else {
         rho0  = rhoR;
         vel0  = velR;
         pre0  = preR;
         etot0 = etotR;
-        e0    = eR; 
+        //e0    = eR; 
     }
 
     // Calculate HLLC fluxes 
@@ -418,18 +416,33 @@ int doHydroStep(double dt){
     double dq[nvar*NCELLS], qM[nvar*NCELLS], qP[nvar*NCELLS];
     double fluxes[nvar*NINTER], unew;
     double rm,rp, surfm = 1, surfp = 1, vol;
-    double smom, dx_sph;
+    double smom;
     ierr = setBoundary();
+    if(ierr < 0){
+        return -1;
+    }
     // update the primitive variables 
     ierr = toPrimitive();
+    if(ierr < 0){
+        return -1;
+    }
     if(useHydro > 0) { 
         // calculate TVD Slope
         ierr = getTVDSlopes(dq, dr, dt);
+        if(ierr < 0){
+            return -1;
+        }
 
         // calculate left and right riemann states
         ierr = getRiemannStates(dq, qP, qM, rs, dr, dt);
+        if(ierr < 0){
+            return -1;
+        }
         // calculate Fluxes 
         ierr = getFluxes(qM, qP, fluxes);
+        if(ierr < 0){
+            return -1;
+        }
 
         // Update the conservative variables
         for(icell = 2; icell < NCELLS-2; icell++){
@@ -440,7 +453,6 @@ int doHydroStep(double dt){
             if(geometry == 1){
                 rm = rs[icell] - dr[icell]*0.5;
                 rp = rs[icell] + dr[icell]*0.5;
-                dx_sph = (rp*rp*rp -rm*rm*rm)/(3*rs[icell]*rs[icell]*dr[icell]);
                 
                 surfm = rm*rm;//*dx_sph;
                 surfp = rp*rp;//*dx_sph;

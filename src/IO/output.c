@@ -15,6 +15,9 @@ int makeOutput(double t, char *outputName){
     fprintf(fptr,"# time = %.4e\n", t);
 
     ierr = toPrimitive();
+    if(ierr < 0) {
+        return -1;
+    }
     for(icell = 2; icell < NCELLS-2; icell++){
         fprintf(fptr, "%.8e\t", rs[icell]);
         idx = icell*nvar;

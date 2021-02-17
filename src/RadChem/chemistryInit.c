@@ -7,6 +7,10 @@
 #include "hydro.h"
 #include "radchem.h"
 #include "cgeneral.h"
+#ifdef useDust
+    #include "dust.h"
+#endif
+
 int nrealPars = 24;
 real_list_t *chemDPars = NULL;
 int nintPars = 11;
@@ -131,7 +135,8 @@ int initChemistry(){
     //Init radiation
     initRadiation();
     
-    
+    //Init Dust
+    initDust();    
     return 1;
 
 }

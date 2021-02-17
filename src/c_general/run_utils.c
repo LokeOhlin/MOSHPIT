@@ -128,4 +128,5 @@ int recmkdir(const char *dir) {
             return -1;
         }
     }
+    return 1;
 }

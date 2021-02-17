@@ -173,7 +173,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
 
 #ifdef useDust
     // Calculate local absorption based on the size distribution of the local dust
-    something_funny();
+    dAv = AV_conversion_factor*numdr*(2.0*xH2+xH2+xHp);//*exp(-Temp/Temp_lim);
 #else
     dAv = AV_conversion_factor*numdr*(2.0*xH2+xH2+xHp);//*exp(-Temp/Temp_lim);
 #endif
@@ -187,7 +187,15 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         
 #ifdef useDust
     // Calculate the total optical depth from dust of these photons and how much they absorb
-    something_funnier();
+    taud5In  = dustAtt5 * AvOld * dust_to_gas_ratio; 
+    taud5Out = dustAtt5 * Av    * dust_to_gas_ratio; 
+    Dtaud5   = dustAtt5 * dAv   * dust_to_gas_ratio; 
+    if(Dtaud5 > 1e-11){
+        dEdust = Npeh * dt * (exp(-taud5In)- exp(-taud5Out));
+    } else {
+        dEdust = Npeh * dt * exp(-taud5In) * ( Dtaud5 - 0.5 * Dtaud5 * Dtaud5);
+    }
+    DustEabs = DustEabs + dEdust/dt;
 #else
     taud5In  = dustAtt5 * AvOld * dust_to_gas_ratio; 
     taud5Out = dustAtt5 * Av    * dust_to_gas_ratio; 
@@ -217,7 +225,9 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     
 #ifdef useDust
     // Calculate the total optical depth from dust of these photons and how much they absorb
-    something_funnier();
+    taud11In  = dustAtt11 * AvOld * dust_to_gas_ratio; 
+    taud11Out = dustAtt11 * Av    * dust_to_gas_ratio; 
+    Dtaud11   = dustAtt11 * dAv   * dust_to_gas_ratio; 
 #else
     taud11In  = dustAtt11 * AvOld * dust_to_gas_ratio; 
     taud11Out = dustAtt11 * Av    * dust_to_gas_ratio; 
@@ -268,7 +278,13 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     // DUST ABSORPTION
     
 #ifdef useDust 
-    something_funnier();
+    if(Dtaud11 > 1e-11){
+      dNdust11 = fmax(Ndis_in - dNH211,0) * (1.0 - exp(-Dtaud11));
+    } else {
+      dNdust11 = fmax(Ndis_in - dNH211,0) * (Dtaud11-0.5*Dtaud11*Dtaud11);
+    }
+
+    DustEabs = DustEabs + dNdust11*Edis/dt;
 #else
     // Assume H2 takes president.. should probably be done at the same time, but thats not very easy
     if(Dtaud11 > 1e-11){
@@ -293,9 +309,9 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         DtauH  = numdr * sion * xH;
         DtauH2 = numdr * sigmaLW * xH2;
 #ifdef useDust
-        DtauD  = IMPLEMENT;
+        DtauD  = dustAtt13 * dAv * dust_to_gas_ratio; 
 #else
-        DtauD  = 0;//dustAtt13 * dAv * dust_to_gas_ratio; 
+        DtauD  = dustAtt13 * dAv * dust_to_gas_ratio; 
 #endif
         tauTot = DtauH + DtauH2 + DtauD;
 
@@ -329,7 +345,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         DNdust = NabsTot * DtauD * norm;
         
 #ifdef useDust
-        something_hilarious();
+        DustEabs = DustEabs + DNdust*(Eion + ionE)/dt;
 #else
         DustEabs = DustEabs + DNdust*(Eion + ionE)/dt;
 #endif
@@ -354,9 +370,9 @@ noTau13:
         DtauH  = numdr * sionH  * xH;
         DtauH2 = numdr * sionH2 * xH2;
 #ifdef useDust
-        DtauD  = IMPLEMENT;
+        DtauD  = dustAtt15 * dAv   * dust_to_gas_ratio; 
 #else
-        DtauD  = 0;dustAtt15 * dAv   * dust_to_gas_ratio; 
+        DtauD  = dustAtt15 * dAv   * dust_to_gas_ratio; 
 #endif
         tauTot = DtauH + DtauH2 + DtauD;
 
@@ -393,7 +409,7 @@ noTau13:
         DNdust = NabsTot * DtauD * norm;
         
 #ifdef useDust
-        something_hilarious();
+        DustEabs = DustEabs + DNdust*(EionH + ionE)/dt;
 #else
         DustEabs = DustEabs + DNdust*(EionH + ionE)/dt;
 #endif

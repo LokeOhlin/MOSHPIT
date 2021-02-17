@@ -7,6 +7,10 @@
 #include "hydro.h"
 #include "cgeneral.h"
 #include "radchem.h"
+#ifdef useDust
+    #include "dust.h"
+#endif
+
 int nrealHydroPars = 15;
 real_list_t *hydroDPars = NULL;
 int nintHydroPars = 7;
@@ -233,8 +237,7 @@ int init_leftwave(){
 
 int init_sedov(){
     int icell, idx;
-    double mH = 1.675e-24, pc = 3.086e18, Msun = 1.9884e+33;
-    double Myr = 3.154e13, kb = 1.3806e-16;
+    double mH = 1.675e-24, kb = 1.3806e-16;
     double ESN=1e51;
     double num=100, dens;
     double temp=100, ener; 
@@ -301,7 +304,7 @@ int init_grid(){
 }
 int init_domain(){
     int ierr = -1;
-
+    int icell;
     // Allocate arrays
     ustate = (double *) malloc(NCELLS*nvar*sizeof(double));
     pstate = (double *) malloc(NCELLS*nvar*sizeof(double));
@@ -323,6 +326,15 @@ int init_domain(){
     if(ierr < 0) {
         return -1;
     }
+#ifdef useDust
+    double dustMass;
+    double dust_to_gas_ratio;
+    getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
+    for(icell = 0; icell < NCELLS; icell++){
+        dustMass = dust_to_gas_ratio * ustate[icell*nvar];
+        setCellInit(icell, dustMass);
+    } 
+#endif 
     return 1;
 }
 

@@ -109,15 +109,24 @@ int main(){
     printf("\t\tMY HYDRO !\n"); 
     printf("\ncalling initSimulation\n");
     ierr = initSimulation(); 
+    if(ierr < 0){
+        return -1;
+    }
     printf("Done\n"); 
    
      
     printf("\ncalling init_domain\n");
     ierr = init_domain();
+    if(ierr < 0){
+        return -1;
+    }
     printf("done\n"); 
 
     printf("\nEntering main loop\n");
     ierr = mainLoop();
+    if(ierr < 0){
+        return -1;
+    }
     printf("done\n"); 
     
 }

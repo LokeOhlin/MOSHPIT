@@ -71,7 +71,6 @@ void getintegerrtpar(char *name, int *value){
 
 // gets global parameters
 int initRuntimePars(){
-    int ierr;
     getrealrtpar("t0", &t0);
     getrealrtpar("tend", &tend);
     getrealrtpar("dt_init", &dt_init);

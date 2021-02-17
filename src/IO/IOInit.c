@@ -64,7 +64,6 @@ void getintegeriopar(char *name, int *value){
 
 // gets global parameters
 int initIO(){
-    int ierr;
     getintegeriopar("nstepOut", &nstepOut);
     return 1;
 }

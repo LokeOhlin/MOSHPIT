@@ -1,18 +1,18 @@
 CCOMP = gcc
-CFLAGS = -DuseChemistry -Wall
+CFLAGS = -DuseChemistry -DuseDust -Wall
 LIBS = -lm -lgfortran -lquadmath -lstdc++
 CDEPS =
 
 FCOMP = gfortran
 #FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 -DDEBUG_EVOLVE
-FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 
+FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 -std=legacy 
 FDEPS =
 OBJ  = 
 PATHS = 
 
 FLAGS = -g
 
-VPATH = ../Main:../Init:../c_general/:../IO:../Hydro:../RadChem:../RadChem/Chemistry:../Runtime
+VPATH = ../Main:../Init:../c_general/:../IO:../Hydro:../RadChem:../RadChem/Chemistry:../RadChem/Dust:../Runtime
 # Code stuff
 
 # Each directory determines what object it thinks it needs
@@ -29,6 +29,8 @@ include ../RadChem/Chemistry/Makefile
 FDEPS += -I../RadChem/Chemistry/
 include ../RadChem/Makefile
 CDEPS += -I../RadChem/
+include ../RadChem/Dust/Makefile
+CDEPS += -I../RadChem/Dust/
 
 IOOBJ   = 
 include ../IO/Makefile

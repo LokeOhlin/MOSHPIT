@@ -7,52 +7,75 @@
 #include "hydro.h"
 #include "radchem.h"
 #include "cgeneral.h"
-int nrealPars = 24;
+#include "dust.h"
+int nrealDustPars = 12;
 real_list_t *dustDPars = NULL;
-int nintPars = 11;
+int nintDustPars = 2;
 int_list_t *dustIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
 
-// set default parameter lists 
 
 
-int amin, amax;
+double amin, amax;
+double *abin_e = NULL;
+double *abin_c = NULL;
+double fSi;
+
+int isilicone;
+int Nabins;
+// options for initial distribution
+int initDist; 
+// options for grain growth/evaporation rate
+int dadt_mode; // 0 standard based on physical processes
+               // 1 constant rate
+               // 2 rate proportional to grain size 
+               // 3 rate oscillating with time
+double dadt_c;
+double dadt_tscale;
+
 // scratch arrays for calculations in each cell
 double *dadt   = NULL;
 double *number = NULL;
 double *slope  = NULL;
-double *mass   = NULL;
 
 double *Mnew = NULL;
 double *Nnew = NULL;
 double *Snew = NULL;
 
+// SET TO PROPER VALUES
+double rho_s = 3.0;
+double rho_c = 3.0;
 
+// timestep limiter
+double dadt_lim;
 
+// set default parameter lists 
 int setDustPars(){
     // Allocate spaces
-    dustDPars = (real_list_t *) malloc(nrealPars * sizeof(real_list_t));
-    dustIPars = (int_list_t *) malloc(nintPars * sizeof(int_list_t));
+    dustDPars = (real_list_t *) malloc(nrealDustPars * sizeof(real_list_t));
+    dustIPars = (int_list_t *) malloc(nintDustPars * sizeof(int_list_t));
 
     // Real/Double parameters
-    strcpy(chemDPars[0].name, "dust_amin");  chemDPars[0].value = 5e-7;
-    strcpy(chemDPars[1].name, "dust_amax");  chemDPars[1].value = 1e-3;
-    strcpy(chemDPars[2].name, "dust_fsilicone");  chemDPars[2].value = 0.5;
-    strcpy(chemDPars[3].name, "dust_Tsput");  chemDPars[3].value = 2e6;
-    strcpy(chemDPars[3].name, "dust_dadtlim");  chemDPars[3].value = 1.0;
+    strcpy(dustDPars[0].name, "dust_amin");      dustDPars[0].value = 5e-7;
+    strcpy(dustDPars[1].name, "dust_amax");      dustDPars[1].value = 1e-3;
+    strcpy(dustDPars[2].name, "dust_fsilicone"); dustDPars[2].value = 0.5;
+    strcpy(dustDPars[3].name, "dust_Tsput");     dustDPars[3].value = 2e6;
+    strcpy(dustDPars[4].name, "dust_dadt_lim");   dustDPars[4].value = 0.5;
 
 
-    strcpy(chemDPars[3].name, "dust_cmin");  chemDPars[3].value = 0.0;
-    strcpy(chemDPars[3].name, "dust_cmax");  chemDPars[3].value = 0.0;
-    strcpy(chemDPars[3].name, "dust_smin");  chemDPars[3].value = 0.0;
-    strcpy(chemDPars[3].name, "dust_smax");  chemDPars[3].value = 0.0;
-    strcpy(chemDPars[3].name, "dust_plaw");  chemDPars[3].value = 0.0;
+    strcpy(dustDPars[5].name, "dust_cmin");  dustDPars[5].value = 0.0;
+    strcpy(dustDPars[6].name, "dust_cmax");  dustDPars[6].value = 0.0;
+    strcpy(dustDPars[7].name, "dust_smin");  dustDPars[7].value = 0.0;
+    strcpy(dustDPars[8].name, "dust_smax");  dustDPars[8].value = 0.0;
+    strcpy(dustDPars[9].name, "dust_plaw");  dustDPars[9].value = 0.0;
+
+    strcpy(dustDPars[10].name, "dust_dadt_c");  dustDPars[10].value = 1e-13;
+    strcpy(dustDPars[11].name, "dust_dadt_tscale");  dustDPars[11].value = 0.0;
     
-
     // Integer parameters
-    strcpy(chemIPars[0].name, "dust_nbins"); chemIPars[0].value =  30;
-    strcpy(chemIPars[0].name, "dust_intitDist"); chemIPars[0].value = 0;
+    strcpy(dustIPars[0].name, "dust_intitDist"); dustIPars[0].value = 0;
+    strcpy(dustIPars[1].name, "dust_dadt_mode"); dustIPars[1].value = 0;
     return 1;
 }
 
@@ -60,16 +83,16 @@ int checkDustPars(char *name, char *value){
     // Method to see if parameter matches any of the defined chemistry parameters
     int ipar;
     // Check reals
-    for(ipar = 0; ipar < nrealPars; ipar ++){
-        if(compStr(name, chemDPars[ipar].name, 80) > 0){
-            chemDPars[ipar].value = atof(value);
+    for(ipar = 0; ipar < nrealDustPars; ipar ++){
+        if(compStr(name, dustDPars[ipar].name, 80) > 0){
+            dustDPars[ipar].value = atof(value);
             return 1;
         }
     }
 
-    for(ipar = 0; ipar < nintPars; ipar ++){
-        if(compStr(name, chemIPars[ipar].name, 80) > 0){
-            chemIPars[ipar].value = atoi(value);
+    for(ipar = 0; ipar < nintDustPars; ipar ++){
+        if(compStr(name, dustIPars[ipar].name, 80) > 0){
+            dustIPars[ipar].value = atoi(value);
             return 1;
         }
     }
@@ -79,9 +102,9 @@ int checkDustPars(char *name, char *value){
 // Method to get value of a double(real) parameter
 void getrealdustpar(char *name, double *value){
     int ipar;
-    for(ipar = 0; ipar < nrealPars; ipar ++){
-        if(compStr(name, chemDPars[ipar].name, 80) > 0){
-            *value = chemDPars[ipar].value;
+    for(ipar = 0; ipar < nrealDustPars; ipar ++){
+        if(compStr(name, dustDPars[ipar].name, 80) > 0){
+            *value = dustDPars[ipar].value;
             return;
         }
     }
@@ -92,9 +115,9 @@ void getrealdustpar(char *name, double *value){
 // Method to get value of an integer parameter
 void getintegerdustpar(char *name, int *value){
     int ipar;
-    for(ipar = 0; ipar < nintPars; ipar ++){
-        if(compStr(name, chemIPars[ipar].name, 80) > 0){
-            *value = chemIPars[ipar].value;
+    for(ipar = 0; ipar < nintDustPars; ipar ++){
+        if(compStr(name, dustIPars[ipar].name, 80) > 0){
+            *value = dustIPars[ipar].value;
             return;
         }
     }
@@ -104,80 +127,80 @@ void getintegerdustpar(char *name, int *value){
 
 
 int initDustPowerLaw(){
-    int ierr, ibin;
+    int ierr, ibin, iabin;
     double cmax, cmin, smax, smin, plaw;
     double snorm, cnorm;
-    double amin, amax;
-    double smin, smax;
+    double amin_bin, amax_bin;
+    double slope_min, slope_max;
 
-    ierr = getrealdustpar("dust_cmin",cmin);    
-    ierr = getrealdustpar("dust_cmax",cmax);    
-    ierr = getrealdustpar("dust_smin",smin);    
-    ierr = getrealdustpar("dust_smax",smax);    
-    ierr = getrealdustpar("dust_plaw",plaw);
+    getrealdustpar("dust_cmin",&cmin);    
+    getrealdustpar("dust_cmax",&cmax);    
+    getrealdustpar("dust_smin",&smin);    
+    getrealdustpar("dust_smax",&smax);    
+    getrealdustpar("dust_plaw",&plaw);
 
-    cnorm = (plaw+1)/(cmax**(plaw+1) - cmin**(plaw+1));
-    snorm = (plaw+1)/(smax**(plaw+1) - smin**(plaw+1));
+    cnorm = (plaw+1)/(pow(cmax,plaw+1) - pow(cmin,plaw+1));
+    snorm = (plaw+1)/(pow(smax,plaw+1) - pow(smin,plaw+1));
     
-    for(ibin = 0; ibin < isilicate; ibin++){
+    for(ibin = 0; ibin < isilicone; ibin++){
         if(abin_e[ibin] < cmin){
-            amin = cmin;        
+            amin_bin = cmin;        
         } else {
-            amin = abin_e[ibin];
+            amin_bin = abin_e[ibin];
         }
 
         if(abin_e[ibin+1] > cmax){
-            amax = cmax;        
+            amax_bin = cmax;        
         } else {
-            amax = abin_e[ibin+1];
+            amax_bin = abin_e[ibin+1];
         }
         
-        if(amin > amax){
+        if(amin_bin >= amax_bin){
             number[ibin] = 0;
             slope[ibin]  = 0;
             continue;
         }
-        number[ibin] = cnorm*(amax**(plaw+1)-amin**(plaw+1))/(plaw+1);
+        number[ibin] = cnorm*(pow(amax_bin,plaw+1)-pow(amin_bin,plaw+1))/(plaw+1);
         // slope to match max bin edge  (or maximum in distribution)
-        smax  = (cnorm*amax**plaw - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
-        smax  = smax/(amax-abin_c[ibin]);
+        slope_max  = (cnorm*pow(amax_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
+        slope_max  = slope_max/(amax_bin-abin_c[ibin]);
         // min bin edge (or minimum in distribution)
-        smin  = (cnorm*amin**plaw - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
-        smin  = smin/(amin-abin_c[ibin]);
+        slope_min  = (cnorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
+        slope_min  = slope_min/(amin_bin-abin_c[ibin]);
         
         // take the average
-        slope[ibin] = (smin+smax)/2.;
+        slope[ibin] = (slope_min+slope_max)/2.;
     }
     
-    for(ibin = isilicate; ibin < NdustBins; ibin++){
-        iabin = iabin - isilicate;
+    for(ibin = isilicone; ibin < NdustBins; ibin++){
+        iabin = iabin - isilicone;
         if(abin_e[iabin] < smin){
-            amin = smin;        
+            amin_bin = smin;        
         } else {
-            amin = abin_e[iabin];
+            amin_bin = abin_e[iabin];
         }
 
         if(abin_e[iabin+1] > smax){
-            amax = smax;        
+            amax_bin = smax;        
         } else {
-            amax = abin_e[iabin+1];
+            amax_bin = abin_e[iabin+1];
         }
         
-        if(amin > amax){
+        if(amin_bin >= amax_bin){
             number[ibin] = 0;
             slope[ibin]  = 0;
             continue;
         }
-        number[ibin] = snorm*(amax**(plaw+1)-amin**(plaw+1))/(plaw+1);
+        number[ibin] = snorm*(pow(amax_bin,plaw+1)-pow(amin_bin,plaw+1))/(plaw+1);
         // slope to match max bin edge  (or maximum in distribution)
-        smax  = (snorm*amax**plaw - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
-        smax  = smax/(amax-abin_c[iabin]);
+        slope_max  = (snorm*pow(amax_bin,plaw) - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
+        slope_max  = slope_max/(amax_bin-abin_c[iabin]);
         // min bin edge (or minimum in distribution)
-        smin  = (snorm*amin**plaw - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
-        smin  = smin/(amin-abin_c[iabin]);
+        slope_min  = (snorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
+        slope_min  = slope_min/(amin_bin-abin_c[iabin]);
         
         // take the average
-        slope[ibin] = (smin+smax)/2.;
+        slope[ibin] = (slope_min+slope_max)/2.;
     }
 
     return 1;
@@ -191,10 +214,30 @@ int initDustPowerLaw(){
 int initDust(){
     int ierr, ibin;
     double amin, amax, da;
+
     // Number of dust size bins per species
-    ierr = getintegerdustpar("dust_nbins", &NaBins);
-    ierr = getrealdustpar("dust_amin", &amin);
-    ierr = getrealdustpar("dust_amax", &amax);
+    getrealdustpar("dust_amin", &amin);
+    getrealdustpar("dust_amax", &amax);
+    
+    // Mass ratio between silicates and carbon species
+    getrealdustpar("dust_fsilicone", &fSi);
+
+    // if we have silicates and carbonates (eg two species) we need to increase the bins
+    if (fSi > 0 && fSi < 1) {
+        if(NdustBins % 2 != 0){
+            printf("Need even number of dust bins in order to have both silicates and graphite grains\n");
+            return -1;
+        }
+        Nabins = NdustBins/2;
+        isilicone = Nabins;
+        printf("Ndustbins = %d, nsizebins = %d, isilicone = %d", NdustBins, Nabins, isilicone); 
+    } else if(fSi == 1.0){ //only silicates
+        Nabins = NdustBins;
+        isilicone = 0;
+    } else {
+        Nabins = NdustBins;
+        isilicone = Nabins;
+    }
     
     if (amin > amax ) {
         printf("ERROR:  amin > amax \n");
@@ -214,56 +257,101 @@ int initDust(){
     abin_e[1] = exp(log(amin)-da);
     abin_e[2] = amin;
 
-    for(ibin = 3; ibin < Nabins +1, ibin++){
+    for(ibin = 3; ibin < Nabins +1; ibin++){
         abin_e[ibin] = exp(log(abin_e[ibin-1])+da);
     }
     // Calculate cell centers (linear)
     for(ibin = 0; ibin < Nabins; ibin ++){
-        abin_c[ibin] = (abin_e[ibin+1]+abin_e[ibin+2])/2.
+        abin_c[ibin] = (abin_e[ibin]+abin_e[ibin+1])/2.;
     }
     
 
-    // Mass ratio between silicates and carbon species
-    ierr = getrealdustpar("dust_fsilicone", &fSi);
-
-    // if we have silicates and carbonates (eg two species) we need to increase the bins
-    if (fSi > 0) {
-        NdustBins = 2*Nabins;
-        isilicone = Nabins;
-        printf("Ndustbins = %d, nsizebins = %d, isilicone = %d", NdustBins, Nabins, isilicone); 
-    } else if(fSi == 1.0){ //only silicates
-        NdustBins = Nabins;
-        isilicone = 0;
-    } else {
-        NdustBins = Nabins;
-        isilicone = Nabins;
-    }
 
 
     // allocate all arrays
     dadt   = (double *) malloc(NdustBins*sizeof(double));  
     number = (double *) malloc(NdustBins*sizeof(double)); 
     slope  = (double *) malloc(NdustBins*sizeof(double)); 
-    mass   = (double *) malloc(NdustBins*sizeof(double));    
     Mnew   = (double *) malloc(NdustBins*sizeof(double)); 
     Nnew   = (double *) malloc(NdustBins*sizeof(double)); 
     Snew   = (double *) malloc(NdustBins*sizeof(double)); 
 
 
     // Set initial distribution
-    ierr = getintegerdustpar("dust_initDist", &initDist);
+    getintegerdustpar("dust_initDist", &initDist);
     if(initDist == 0){
         ierr = initDustPowerLaw();
     }
+
+    // get parameters for dust growth
+    getintegerdustpar("dust_dadt_mode", &dadt_mode);
+    getrealdustpar("dust_dadt_c", &dadt_c);
+    getrealdustpar("dust_dadt_tscale", &dadt_tscale);
+
     return 1;
 }
 
 
-int setCellInit(int icell){
-    int ibin;
+// Set initial cell dust data, normalised such that everything in iabin >= 1 has a total mass matching the dustMass
+int setCellInit(int icell, double dustMass){
+    int ibin, iabin, graphite;
+    double mass;
+    double Mtot_s, Mtot_c;
+    double norm_s, norm_c, norm;
+
+    Mtot_c = 0;
+    Mtot_s = 0;
+
     for(ibin = 0; ibin < NdustBins; ibin++){
-        ustate[IDUST_BEGIN + ibin*ndustVar]   = number[ibin];
-        ustate[IDUST_BEGIN + ibin*ndustVar+1] = slope[ibin];
+        if(ibin < isilicone){
+            graphite = 1;
+        } else {
+            graphite = 0;
+        }
+
+        // graphite and silicone have the same size bins. Use half array 
+        iabin = ibin - isilicone*(1-graphite);    
+
+        // Conversion to mass density
+        norm = 4*M_PI/3.;
+        if(graphite){
+            norm = norm * rho_c;
+        } else {
+            norm = norm * rho_s;
+        }
+        // Mass (density) in bin
+        mass = getMass(number[ibin], slope[ibin], iabin)*norm;
+        if(iabin > 0){
+            if(graphite){
+                Mtot_c += mass;
+            } else {
+                Mtot_s += mass;
+            }
+        }
+        ustate[icell + IDUST_START + ibin*NdustVar]   = mass;
+        ustate[icell + IDUST_START + ibin*NdustVar+1] = slope[ibin];
+    }
+    
+    norm_s = fSi*dustMass/Mtot_s;
+    norm_c = (1-fSi)*dustMass/Mtot_c;
+
+    for(ibin = 0; ibin < NdustBins; ibin++){
+        if(ibin < isilicone){
+            graphite = 1;
+        } else {
+            graphite = 0;
+        }
+
+        // Mass (density) in bin
+        mass = ustate[icell + IDUST_START + ibin*NdustVar];
+        if(iabin > 0){
+            if(graphite){
+                mass = mass * norm_c;
+            } else {
+                mass = mass * norm_s;
+            }
+        }
+        ustate[icell + IDUST_START + ibin*NdustVar] = mass;
     }
     return 1;
 }

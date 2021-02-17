@@ -1,12 +1,26 @@
 #ifndef HYDRO
 #define HYDRO
 #include "hydro.h"
+
+// How large does our arrays have to be?
+// eg how many variables and species
 #ifdef useChemistry
     #define ICHEM_START  3
     #define ICHEM_END  8
-    #define nvar   9
-// 6 new variables: H, H2, Hp, CO, Cp, Tdus
-// // 6 new variables: H, H2, Hp, CO, Cp, Tdust
+    // No chemistry then no dust for now
+    #ifdef useDust
+        #ifndef NdustBins // if not user specified default 20
+            # define NdustBins 20
+        #endif
+    
+        #define IDUST_START 8
+        #define NdustVar 2*NdustBins
+        // (5 + 2*NdustBins +1) new variables : H, H2, Hp, CO, Cp, dust mass and slope, Tdust from chemistry (not related to dust module)  
+        #define nvar    (IDUST_START + NdustVar+1)  
+    #else
+        // 6 new variables: H, H2, Hp, CO, Cp, Tdust
+        #define nvar   9
+    #endif
 #else
     #define ICHEM_END 3
     #define nvar 3
