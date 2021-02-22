@@ -11,12 +11,15 @@
 #ifdef useChemistry
 #include "radchem.h"
 #endif
+#include "moshpit.h"
+
+double time;
 
 int mainLoop(){
     int istep = 0, io=0, iostep=0, ierr;
     char fname[8] = "output_", outputName[12]="", fnum[5]="";
-    double t, dt, dt_new, dt_chem=1e99;
-    t=t0;
+    double dt, dt_new, dt_chem=1e99;
+    time=t0;
     dt = dt_init;
     // First output
     strcpy(outputName, "");
@@ -32,7 +35,7 @@ int mainLoop(){
     iostep = iostep + nstepOut;
     io = io + 1 ;
     printf("\n %d  %d\n", iostep, nstepOut);
-    while( t < tend ){
+    while( time < tend ){
         // check timestep
         ierr = getCFL(&dt_new);
         if(dt_new < dt){
@@ -43,7 +46,7 @@ int mainLoop(){
         if(dt > dt_max){
             dt = dt_max;
         }
-        printf("step %d time = %.4e dt = %.4e || dt_CFL = %.4e  dt_chem= %.4e\n", istep, t ,dt, dt_new,dt_chem);
+        printf("step %d time = %.4e dt = %.4e || dt_CFL = %.4e  dt_chem= %.4e\n", istep, time ,dt, dt_new,dt_chem);
         //Hydro
         ierr = doHydroStep(dt);
         if(ierr < 0){
@@ -61,7 +64,7 @@ int mainLoop(){
 #endif
 
         istep = istep + 1;
-        t = t+dt;
+        time = time+dt;
         if(istep > imax){
             printf("\nMAXIMUM STEPS REACHED\n");
             break;
@@ -78,7 +81,7 @@ int mainLoop(){
             printf("%s ", outputName);
             printf("\n");
     
-            ierr = makeOutput(t, outputName);
+            ierr = makeOutput(time, outputName);
             if(ierr < 0){
                 return -1;
             }
@@ -96,7 +99,7 @@ int mainLoop(){
     printf("%s",outputName);
     printf("\n");
     
-    ierr = makeOutput(t, outputName);
+    ierr = makeOutput(time, outputName);
     iostep = iostep + nstepOut;
     io = io + 1;
     return -1;

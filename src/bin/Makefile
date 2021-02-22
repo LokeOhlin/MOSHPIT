@@ -1,5 +1,5 @@
 CCOMP = gcc
-CFLAGS = -DuseChemistry -DuseDust -Wall
+CFLAGS = -DuseChemistry -DuseDust -Wall -g -fbounds-check -Wuninitialized -O -DNdustBins=128
 LIBS = -lm -lgfortran -lquadmath -lstdc++
 CDEPS =
 
@@ -46,7 +46,7 @@ CDEPS += -I../Runtime/
 
 MAINOBJ = 
 include ../Main/Makefile
-
+CDEPS += -I../Main/
 
 # Gather modules
 OBJ += $(CHEMOBJ)

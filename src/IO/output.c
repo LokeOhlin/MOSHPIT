@@ -6,13 +6,26 @@
 #include <sys/stat.h>
 #include "hydro.h"
 #include "IO.h"
-
+#ifdef useDust 
+    #include "dust.h"
+#endif
 int makeOutput(double t, char *outputName){
     int icell,ivar,idx, ierr;
     FILE *fptr = fopen(outputName, "w");
-
     //write output info
     fprintf(fptr,"# time = %.4e\n", t);
+    fprintf(fptr,"# nvar = %d\n", nvar);
+#ifdef useDust
+    double tmp;
+    fprintf(fptr,"# IDUST_START = %d\n", IDUST_START);
+    fprintf(fptr,"# NdustVar = %d\n", NdustVar);
+    fprintf(fptr,"# isilicone = %d\n", isilicone);
+    fprintf(fptr,"# Nabins = %d\n", Nabins);
+    getrealdustpar("dust_amin", &tmp);
+    fprintf(fptr,"# amin = %.4e\n", tmp); 
+    getrealdustpar("dust_amax", &tmp);
+    fprintf(fptr,"# amax = %.4e\n", tmp);
+#endif
 
     ierr = toPrimitive();
     if(ierr < 0) {

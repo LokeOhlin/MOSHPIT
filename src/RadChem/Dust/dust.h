@@ -22,6 +22,8 @@ double getSlope (double Nj, double Mj,int iabin);
 double getNumber(double Sj, double Mj,int iabin);
 double getMass  (double Nj, double Sj,int iabin);
 
+// Method to limit slope do avoid dnda < 0 anywhere
+int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, int iabin);
 
 // Main call to update dust distribution
 int dustCell(double *rpars, int *ipars, double dt_step);

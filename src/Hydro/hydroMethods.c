@@ -124,6 +124,11 @@ int toPrimitive(){
             pstate[idx + ivar] = ustate[idx + ivar];
         }
 #endif 
+#ifdef useDust
+        for(ivar = IDUST_START; ivar < nvar; ivar++){
+            pstate[idx + ivar] = ustate[idx + ivar];
+        }
+#endif
     }
     return 1;
 }

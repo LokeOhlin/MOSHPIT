@@ -64,17 +64,17 @@ int setDustPars(){
     strcpy(dustDPars[4].name, "dust_dadt_lim");   dustDPars[4].value = 0.5;
 
 
-    strcpy(dustDPars[5].name, "dust_cmin");  dustDPars[5].value = 0.0;
-    strcpy(dustDPars[6].name, "dust_cmax");  dustDPars[6].value = 0.0;
-    strcpy(dustDPars[7].name, "dust_smin");  dustDPars[7].value = 0.0;
-    strcpy(dustDPars[8].name, "dust_smax");  dustDPars[8].value = 0.0;
-    strcpy(dustDPars[9].name, "dust_plaw");  dustDPars[9].value = 0.0;
+    strcpy(dustDPars[5].name, "dust_cmin");  dustDPars[5].value = 1e-8;
+    strcpy(dustDPars[6].name, "dust_cmax");  dustDPars[6].value = 1e-4;
+    strcpy(dustDPars[7].name, "dust_smin");  dustDPars[7].value = 1e-8;
+    strcpy(dustDPars[8].name, "dust_smax");  dustDPars[8].value = 1e-4;
+    strcpy(dustDPars[9].name, "dust_plaw");  dustDPars[9].value = -3.5;
 
     strcpy(dustDPars[10].name, "dust_dadt_c");  dustDPars[10].value = 1e-13;
     strcpy(dustDPars[11].name, "dust_dadt_tscale");  dustDPars[11].value = 0.0;
     
     // Integer parameters
-    strcpy(dustIPars[0].name, "dust_intitDist"); dustIPars[0].value = 0;
+    strcpy(dustIPars[0].name, "dust_initDist"); dustIPars[0].value = 0;
     strcpy(dustIPars[1].name, "dust_dadt_mode"); dustIPars[1].value = 0;
     return 1;
 }
@@ -132,7 +132,8 @@ int initDustPowerLaw(){
     double snorm, cnorm;
     double amin_bin, amax_bin;
     double slope_min, slope_max;
-
+    double dadn_e, dadn_c, dadn_ep;
+    double Nj, Sj, mass;
     getrealdustpar("dust_cmin",&cmin);    
     getrealdustpar("dust_cmax",&cmax);    
     getrealdustpar("dust_smin",&smin);    
@@ -141,7 +142,7 @@ int initDustPowerLaw(){
 
     cnorm = (plaw+1)/(pow(cmax,plaw+1) - pow(cmin,plaw+1));
     snorm = (plaw+1)/(pow(smax,plaw+1) - pow(smin,plaw+1));
-    
+    printf("cmax %.4e, cmin %.4e, smax %.4e, smin %.4e, plaw %.4e \n", cmax, cmin, smax, smin, plaw); 
     for(ibin = 0; ibin < isilicone; ibin++){
         if(abin_e[ibin] < cmin){
             amin_bin = cmin;        
@@ -160,20 +161,41 @@ int initDustPowerLaw(){
             slope[ibin]  = 0;
             continue;
         }
+        // total number in bin is  integral_bin dnda da
         number[ibin] = cnorm*(pow(amax_bin,plaw+1)-pow(amin_bin,plaw+1))/(plaw+1);
         // slope to match max bin edge  (or maximum in distribution)
         slope_max  = (cnorm*pow(amax_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
         slope_max  = slope_max/(amax_bin-abin_c[ibin]);
         // min bin edge (or minimum in distribution)
-        slope_min  = (cnorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
-        slope_min  = slope_min/(amin_bin-abin_c[ibin]);
-        
+        if(abin_e[ibin] < cmin){
+            slope_min  = number[ibin]/(abin_e[ibin+1]-abin_e[ibin])/(abin_c[ibin]-abin_e[ibin]);
+        }else{
+            slope_min  = (cnorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
+            slope_min  = slope_min/(amin_bin-abin_c[ibin]);
+        } 
         // take the average
+        // printf("bin %d : slope_min %.4e slope_max %.4e %.4e %.4e %.4e %.4e %.4e\n", ibin, slope_min, slope_max, amin_bin, amax_bin, abin_c[ibin], cnorm*pow(amax_bin,plaw), number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
         slope[ibin] = (slope_min+slope_max)/2.;
+        // get mass (needed for slope limiter)
+        mass = getMass(number[ibin], slope[ibin], ibin);
+        // make sure no negative dnda
+        printf(" %d %.4e %.4e %.4e %.4e\n",ibin, number[ibin], slope[ibin],slope_min, slope_max);
+        limitSlope(&Nj, &Sj, number[ibin], slope[ibin], mass, ibin);
+        number[ibin] = Nj;
+        slope[ibin]  = Sj;
+        
+        dadn_e  = number[ibin]/(abin_e[ibin+1]-abin_e[ibin]) + slope[ibin]*(abin_e[ibin]-abin_c[ibin]) ;
+        dadn_c  = number[ibin]/(abin_e[ibin+1]-abin_e[ibin]) ;
+        dadn_ep = number[ibin]/(abin_e[ibin+1]-abin_e[ibin]) + slope[ibin]*(abin_e[ibin+1]-abin_c[ibin]) ;
+        printf(" %d %.4e %.4e %.4e %.4e %.4e %.4e %.4e\n",ibin, number[ibin], slope[ibin],dadn_e, dadn_c, dadn_ep, slope_min, slope_max);
+
+        if(dadn_ep < 0){
+            slope[ibin] = slope_max;
+        } 
     }
     
     for(ibin = isilicone; ibin < NdustBins; ibin++){
-        iabin = iabin - isilicone;
+        iabin = ibin - isilicone;
         if(abin_e[iabin] < smin){
             amin_bin = smin;        
         } else {
@@ -200,9 +222,10 @@ int initDustPowerLaw(){
         slope_min  = slope_min/(amin_bin-abin_c[iabin]);
         
         // take the average
+        // printf("bin %d : slope_min %.4e slope_max %.4e\n", ibin, slope_min, slope_max);
         slope[ibin] = (slope_min+slope_max)/2.;
     }
-
+    
     return 1;
 }
 
@@ -222,7 +245,7 @@ int initDust(){
     // Mass ratio between silicates and carbon species
     getrealdustpar("dust_fsilicone", &fSi);
 
-    // if we have silicates and carbonates (eg two species) we need to increase the bins
+    // if we have silicates and carbonates (eg two species) we need to reduce the number of bins to accomodate both
     if (fSi > 0 && fSi < 1) {
         if(NdustBins % 2 != 0){
             printf("Need even number of dust bins in order to have both silicates and graphite grains\n");
@@ -230,13 +253,13 @@ int initDust(){
         }
         Nabins = NdustBins/2;
         isilicone = Nabins;
-        printf("Ndustbins = %d, nsizebins = %d, isilicone = %d", NdustBins, Nabins, isilicone); 
+        printf("Ndustbins = %d, nsizebins = %d, isilicone = %d\n", NdustBins, Nabins, isilicone); 
     } else if(fSi == 1.0){ //only silicates
         Nabins = NdustBins;
         isilicone = 0;
     } else {
         Nabins = NdustBins;
-        isilicone = Nabins;
+        isilicone = NdustBins;
     }
     
     if (amin > amax ) {
@@ -246,18 +269,16 @@ int initDust(){
 
     da = (log(amax) - log(amin))/ Nabins;
     
-    // add ghost cells, two below, one above
-    Nabins = Nabins + 3;
+    // add ghost cells, one below, one above
+    //    Nabins = Nabins + 2;
 
     // allocate arrays
     abin_c = (double *) malloc(Nabins*sizeof(double));
     abin_e = (double *) malloc((Nabins+1)*sizeof(double));
     // populate the edges of the cells
-    abin_e[0] = exp(log(amin)-2*da);
-    abin_e[1] = exp(log(amin)-da);
-    abin_e[2] = amin;
+    abin_e[0] = amin;
 
-    for(ibin = 3; ibin < Nabins +1; ibin++){
+    for(ibin = 1; ibin < Nabins+1; ibin++){
         abin_e[ibin] = exp(log(abin_e[ibin-1])+da);
     }
     // Calculate cell centers (linear)
@@ -279,6 +300,7 @@ int initDust(){
 
     // Set initial distribution
     getintegerdustpar("dust_initDist", &initDist);
+    printf("INITDIST %d", initDist);
     if(initDist == 0){
         ierr = initDustPowerLaw();
     }
@@ -288,6 +310,8 @@ int initDust(){
     getrealdustpar("dust_dadt_c", &dadt_c);
     getrealdustpar("dust_dadt_tscale", &dadt_tscale);
 
+    // timestep limiters
+    getrealdustpar("dust_dadt_lim", &dadt_lim);
     return 1;
 }
 
@@ -297,7 +321,7 @@ int setCellInit(int icell, double dustMass){
     int ibin, iabin, graphite;
     double mass;
     double Mtot_s, Mtot_c;
-    double norm_s, norm_c, norm;
+    double norm_s, norm_c, norm, Sj;
 
     Mtot_c = 0;
     Mtot_s = 0;
@@ -321,15 +345,12 @@ int setCellInit(int icell, double dustMass){
         }
         // Mass (density) in bin
         mass = getMass(number[ibin], slope[ibin], iabin)*norm;
-        if(iabin > 0){
-            if(graphite){
-                Mtot_c += mass;
-            } else {
-                Mtot_s += mass;
-            }
+        if(graphite){
+            Mtot_c += mass;
+        } else {
+            Mtot_s += mass;
         }
-        ustate[icell + IDUST_START + ibin*NdustVar]   = mass;
-        ustate[icell + IDUST_START + ibin*NdustVar+1] = slope[ibin];
+        ustate[icell*nvar + IDUST_START + ibin*NdustVar]   = mass;
     }
     
     norm_s = fSi*dustMass/Mtot_s;
@@ -343,16 +364,20 @@ int setCellInit(int icell, double dustMass){
         }
 
         // Mass (density) in bin
-        mass = ustate[icell + IDUST_START + ibin*NdustVar];
-        if(iabin > 0){
-            if(graphite){
-                mass = mass * norm_c;
-            } else {
-                mass = mass * norm_s;
-            }
+        mass = ustate[icell*nvar + IDUST_START + ibin*NdustVar];
+        Sj   = slope[ibin];
+        // Normalize to match mass density
+        if(graphite){
+            mass = mass * norm_c;
+            Sj   = Sj * norm_c; 
+        } else {
+            mass = mass * norm_s;
+            Sj   = Sj * norm_s;
         }
-        ustate[icell + IDUST_START + ibin*NdustVar] = mass;
+        ustate[icell*nvar + IDUST_START + ibin*NdustVar] = mass;
+        ustate[icell*nvar + IDUST_START + ibin*NdustVar+1] = Sj;
     }
+
     return 1;
 }
 

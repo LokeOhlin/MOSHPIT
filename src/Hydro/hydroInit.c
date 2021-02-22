@@ -330,7 +330,7 @@ int init_domain(){
     double dustMass;
     double dust_to_gas_ratio;
     getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
-    for(icell = 0; icell < NCELLS; icell++){
+    for(icell = NGHOST; icell < NCELLS - NGHOST; icell++){
         dustMass = dust_to_gas_ratio * ustate[icell*nvar];
         setCellInit(icell, dustMass);
     } 

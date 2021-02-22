@@ -13,10 +13,10 @@
             # define NdustBins 20
         #endif
     
-        #define IDUST_START 8
-        #define NdustVar 2*NdustBins
+        #define IDUST_START (ICHEM_END+1)
+        #define NdustVar 2
         // (5 + 2*NdustBins +1) new variables : H, H2, Hp, CO, Cp, dust mass and slope, Tdust from chemistry (not related to dust module)  
-        #define nvar    (IDUST_START + NdustVar+1)  
+        #define nvar    (IDUST_START + NdustVar * NdustBins)  
     #else
         // 6 new variables: H, H2, Hp, CO, Cp, Tdust
         #define nvar   9

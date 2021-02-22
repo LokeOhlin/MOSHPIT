@@ -11,6 +11,9 @@
 #include "rtpars.h"
 #ifdef useChemistry
 #include "radchem.h"
+#ifdef useDust
+#include "dust.h"
+#endif
 #endif
 
 
@@ -61,6 +64,10 @@ int readParameterFile(){
         if(found > 0){
             continue;
         }
+        found = checkDustPars(name, value);
+        if(found > 0){
+            continue;
+        }
         found = checkRuntimePars(name, value);
         if(found > 0){
             continue;
@@ -78,6 +85,7 @@ int initSimulation(){
     ierr = setRuntimePars();
     ierr = setIOPars();
     ierr = setChemistryPars();
+    ierr = setDustPars();
 
     printf("\treading parameter file\n");
     ierr = readParameterFile();
