@@ -1,5 +1,6 @@
 CCOMP = gcc
-CFLAGS = -DuseChemistry -DuseDust -Wall -g -fbounds-check -Wuninitialized -O -DNdustBins=128
+CFLAGS = -DuseChemistry -DuseDust -fbounds-check -O -DNdustBins=256
+CFLAGS += -O3
 LIBS = -lm -lgfortran -lquadmath -lstdc++
 CDEPS =
 

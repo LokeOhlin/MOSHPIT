@@ -19,8 +19,17 @@ int makeOutput(double t, char *outputName){
     double tmp;
     fprintf(fptr,"# IDUST_START = %d\n", IDUST_START);
     fprintf(fptr,"# NdustVar = %d\n", NdustVar);
-    fprintf(fptr,"# isilicone = %d\n", isilicone);
-    fprintf(fptr,"# Nabins = %d\n", Nabins);
+    fprintf(fptr,"# fSi = %.4e\n", fSi);
+    fprintf(fptr,"# Nabins = %d\n", Nabins-2*dust_nghost);
+    if(fSi > 0.0 && fSi < 1.0){
+        fprintf(fptr,"# isilicone = %d\n", isilicone-2*dust_nghost);
+    } else {
+        if(fSi > 0.0){
+            fprintf(fptr,"# isilicone = %d\n", isilicone);
+        } else {
+            fprintf(fptr,"# isilicone = %d\n", isilicone- 2*dust_nghost);
+        }
+    }
     getrealdustpar("dust_amin", &tmp);
     fprintf(fptr,"# amin = %.4e\n", tmp); 
     getrealdustpar("dust_amax", &tmp);

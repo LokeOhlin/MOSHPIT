@@ -20,10 +20,20 @@ int_list_t *dustIPars = NULL;
 double amin, amax;
 double *abin_e = NULL;
 double *abin_c = NULL;
+
+// Factors om front of N and S after integrating over bin to get average size
+double *NfactA = NULL;
+double *SfactA = NULL;
+
+// Factors in front of N and S after integrating over bin to get mass
+double *NfactM = NULL;
+double *SfactM = NULL;
+
 double fSi;
 
 int isilicone;
 int Nabins;
+int dust_nbins;
 // options for initial distribution
 int initDist; 
 // options for grain growth/evaporation rate
@@ -132,7 +142,6 @@ int initDustPowerLaw(){
     double snorm, cnorm;
     double amin_bin, amax_bin;
     double slope_min, slope_max;
-    double dadn_e, dadn_c, dadn_ep;
     double Nj, Sj, mass;
     getrealdustpar("dust_cmin",&cmin);    
     getrealdustpar("dust_cmax",&cmax);    
@@ -142,90 +151,101 @@ int initDustPowerLaw(){
 
     cnorm = (plaw+1)/(pow(cmax,plaw+1) - pow(cmin,plaw+1));
     snorm = (plaw+1)/(pow(smax,plaw+1) - pow(smin,plaw+1));
-    printf("cmax %.4e, cmin %.4e, smax %.4e, smin %.4e, plaw %.4e \n", cmax, cmin, smax, smin, plaw); 
-    for(ibin = 0; ibin < isilicone; ibin++){
-        if(abin_e[ibin] < cmin){
-            amin_bin = cmin;        
-        } else {
-            amin_bin = abin_e[ibin];
-        }
+    printf("cmax %.4e, cmin %.4e, smax %.4e, smin %.4e, plaw %.4e \n", cmax, cmin, smax, smin, plaw);
+    if(fSi < 1.0){ 
+        for(ibin = 0; ibin < isilicone; ibin++){
+            if(abin_e[ibin] < cmin){
+                amin_bin = cmin;        
+            } else {
+                amin_bin = abin_e[ibin];
+            }
 
-        if(abin_e[ibin+1] > cmax){
-            amax_bin = cmax;        
-        } else {
-            amax_bin = abin_e[ibin+1];
-        }
-        
-        if(amin_bin >= amax_bin){
-            number[ibin] = 0;
-            slope[ibin]  = 0;
-            continue;
-        }
-        // total number in bin is  integral_bin dnda da
-        number[ibin] = cnorm*(pow(amax_bin,plaw+1)-pow(amin_bin,plaw+1))/(plaw+1);
-        // slope to match max bin edge  (or maximum in distribution)
-        slope_max  = (cnorm*pow(amax_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
-        slope_max  = slope_max/(amax_bin-abin_c[ibin]);
-        // min bin edge (or minimum in distribution)
-        if(abin_e[ibin] < cmin){
-            slope_min  = number[ibin]/(abin_e[ibin+1]-abin_e[ibin])/(abin_c[ibin]-abin_e[ibin]);
-        }else{
-            slope_min  = (cnorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
-            slope_min  = slope_min/(amin_bin-abin_c[ibin]);
-        } 
-        // take the average
-        // printf("bin %d : slope_min %.4e slope_max %.4e %.4e %.4e %.4e %.4e %.4e\n", ibin, slope_min, slope_max, amin_bin, amax_bin, abin_c[ibin], cnorm*pow(amax_bin,plaw), number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
-        slope[ibin] = (slope_min+slope_max)/2.;
-        // get mass (needed for slope limiter)
-        mass = getMass(number[ibin], slope[ibin], ibin);
-        // make sure no negative dnda
-        printf(" %d %.4e %.4e %.4e %.4e\n",ibin, number[ibin], slope[ibin],slope_min, slope_max);
-        limitSlope(&Nj, &Sj, number[ibin], slope[ibin], mass, ibin);
-        number[ibin] = Nj;
-        slope[ibin]  = Sj;
-        
-        dadn_e  = number[ibin]/(abin_e[ibin+1]-abin_e[ibin]) + slope[ibin]*(abin_e[ibin]-abin_c[ibin]) ;
-        dadn_c  = number[ibin]/(abin_e[ibin+1]-abin_e[ibin]) ;
-        dadn_ep = number[ibin]/(abin_e[ibin+1]-abin_e[ibin]) + slope[ibin]*(abin_e[ibin+1]-abin_c[ibin]) ;
-        printf(" %d %.4e %.4e %.4e %.4e %.4e %.4e %.4e\n",ibin, number[ibin], slope[ibin],dadn_e, dadn_c, dadn_ep, slope_min, slope_max);
+            if(abin_e[ibin+1] > cmax){
+                amax_bin = cmax;        
+            } else {
+                amax_bin = abin_e[ibin+1];
+            }
+            
+            if(amin_bin >= amax_bin){
+                number[ibin] = 0;
+                slope[ibin]  = 0;
+                continue;
+            }
+            // total number in bin is  integral_bin dnda da
+            number[ibin] = cnorm*(pow(amax_bin,plaw+1)-pow(amin_bin,plaw+1))/(plaw+1);
 
-        if(dadn_ep < 0){
-            slope[ibin] = slope_max;
-        } 
+            // slope to match max bin edge, if outside distribution the it is zero
+            if(abin_e[ibin+1] > cmax){
+                slope_max  = -number[ibin]/(abin_e[ibin+1]-abin_e[ibin])/(abin_e[ibin+1]-abin_c[ibin]);
+            }else{
+                slope_max  = (cnorm*pow(amax_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
+                slope_max  = slope_max/(amax_bin-abin_c[ibin]);
+            }
+            // min bin edge 
+            if(abin_e[ibin] < cmin){
+                slope_min  = number[ibin]/(abin_e[ibin+1]-abin_e[ibin])/(abin_c[ibin]-abin_e[ibin]);
+            }else{
+                slope_min  = (cnorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[ibin+1]-abin_e[ibin]));
+                slope_min  = slope_min/(amin_bin-abin_c[ibin]);
+            } 
+            // take the average
+            slope[ibin] = (slope_min+slope_max)/2.;
+            // get mass (needed for slope limiter)
+            mass = getMass(number[ibin], slope[ibin], ibin);
+            // make sure no negative dnda
+            
+            limitSlope(&Nj, &Sj, number[ibin], slope[ibin], mass, ibin);
+            number[ibin] = Nj;
+            slope[ibin]  = Sj;
+        }
     }
-    
-    for(ibin = isilicone; ibin < NdustBins; ibin++){
-        iabin = ibin - isilicone;
-        if(abin_e[iabin] < smin){
-            amin_bin = smin;        
-        } else {
-            amin_bin = abin_e[iabin];
-        }
+    if(fSi > 0.0){ 
+        for(ibin = isilicone; ibin < isilicone + Nabins; ibin++){
+            iabin = ibin - isilicone;
+            if(abin_e[iabin] < smin){
+                amin_bin = smin;        
+            } else {
+                amin_bin = abin_e[iabin];
+            }
 
-        if(abin_e[iabin+1] > smax){
-            amax_bin = smax;        
-        } else {
-            amax_bin = abin_e[iabin+1];
+            if(abin_e[iabin+1] > smax){
+                amax_bin = smax;        
+            } else {
+                amax_bin = abin_e[iabin+1];
+            }
+            
+            if(amin_bin >= amax_bin){
+                number[ibin] = 0;
+                slope[ibin]  = 0;
+                continue;
+            }
+            number[ibin] = snorm*(pow(amax_bin,plaw+1)-pow(amin_bin,plaw+1))/(plaw+1);
+            
+            // slope to match max bin edge, if outside distribution the it is zero
+            if(abin_e[iabin+1] > smax){
+                slope_max  = -number[ibin]/(abin_e[iabin+1]-abin_e[iabin])/(abin_e[iabin+1]-abin_c[iabin]);
+            }else{
+                slope_max  = (snorm*pow(amax_bin,plaw) - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
+                slope_max  = slope_max/(amax_bin-abin_c[iabin]);
+            }
+            // min bin edge 
+            if(abin_e[iabin] < smin){
+                slope_min  = number[ibin]/(abin_e[iabin+1]-abin_e[iabin])/(abin_c[iabin]-abin_e[iabin]);
+            }else{
+                slope_min  = (snorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
+                slope_min  = slope_min/(amin_bin-abin_c[iabin]);
+            } 
+            // take the average
+            slope[ibin] = (slope_min+slope_max)/2.;
+            // get mass (needed for slope limiter)
+            mass = getMass(number[ibin], slope[ibin], iabin);
+            // make sure no negative dnda
+            
+            limitSlope(&Nj, &Sj, number[ibin], slope[ibin], mass, iabin);
+            number[ibin] = Nj;
+            slope[ibin]  = Sj;
         }
-        
-        if(amin_bin >= amax_bin){
-            number[ibin] = 0;
-            slope[ibin]  = 0;
-            continue;
-        }
-        number[ibin] = snorm*(pow(amax_bin,plaw+1)-pow(amin_bin,plaw+1))/(plaw+1);
-        // slope to match max bin edge  (or maximum in distribution)
-        slope_max  = (snorm*pow(amax_bin,plaw) - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
-        slope_max  = slope_max/(amax_bin-abin_c[iabin]);
-        // min bin edge (or minimum in distribution)
-        slope_min  = (snorm*pow(amin_bin,plaw) - number[ibin]/(abin_e[iabin+1]-abin_e[iabin]));
-        slope_min  = slope_min/(amin_bin-abin_c[iabin]);
-        
-        // take the average
-        // printf("bin %d : slope_min %.4e slope_max %.4e\n", ibin, slope_min, slope_max);
-        slope[ibin] = (slope_min+slope_max)/2.;
-    }
-    
+    } 
     return 1;
 }
 
@@ -237,7 +257,7 @@ int initDustPowerLaw(){
 int initDust(){
     int ierr, ibin;
     double amin, amax, da;
-
+    double ae, aep, ac;
     // Number of dust size bins per species
     getrealdustpar("dust_amin", &amin);
     getrealdustpar("dust_amax", &amax);
@@ -254,12 +274,8 @@ int initDust(){
         Nabins = NdustBins/2;
         isilicone = Nabins;
         printf("Ndustbins = %d, nsizebins = %d, isilicone = %d\n", NdustBins, Nabins, isilicone); 
-    } else if(fSi == 1.0){ //only silicates
-        Nabins = NdustBins;
-        isilicone = 0;
     } else {
         Nabins = NdustBins;
-        isilicone = NdustBins;
     }
     
     if (amin > amax ) {
@@ -267,36 +283,66 @@ int initDust(){
         return -1;
     }
 
-    da = (log(amax) - log(amin))/ Nabins;
+    da = exp((log(amax) - log(amin))/ Nabins);
     
     // add ghost cells, one below, one above
-    //    Nabins = Nabins + 2;
+    Nabins = Nabins + 2*dust_nghost;
 
     // allocate arrays
     abin_c = (double *) malloc(Nabins*sizeof(double));
     abin_e = (double *) malloc((Nabins+1)*sizeof(double));
+
+    NfactA  = (double *) malloc(Nabins*sizeof(double));
+    NfactM  = (double *) malloc(Nabins*sizeof(double));
+    SfactA  = (double *) malloc(Nabins*sizeof(double));
+    SfactM  = (double *) malloc(Nabins*sizeof(double));
     // populate the edges of the cells
-    abin_e[0] = amin;
+    abin_e[0] = 0;
 
     for(ibin = 1; ibin < Nabins+1; ibin++){
-        abin_e[ibin] = exp(log(abin_e[ibin-1])+da);
+        abin_e[ibin] = amin*pow(da,ibin-1);
     }
     // Calculate cell centers (linear)
     for(ibin = 0; ibin < Nabins; ibin ++){
         abin_c[ibin] = (abin_e[ibin]+abin_e[ibin+1])/2.;
     }
+
+    // pre calculate factors
+    for(ibin = 0; ibin < Nabins; ibin ++){
+        aep = abin_e[ibin+1];
+        ae  = abin_e[ibin];
+        ac  = abin_c[ibin];
+        NfactA[ibin]  = 0.5*(aep*aep-ae*ae)/(aep-ae);
+        SfactA[ibin]  = pow(aep, 2)*(aep/3. - ac/2.);
+        SfactA[ibin] -= pow(ae , 2)*(ae/3.  - ac/2.);
+
+        NfactM[ibin]  = (pow(aep, 4) - pow(ae,4))/(4*(aep-ae));
+        SfactM[ibin]  = pow(aep,4)*(aep/5. - ac/4.);
+        SfactM[ibin] -= pow(ae ,4)*(ae/5.  - ac/4.);
+    }
     
+    // allocate all arrays, these also have ghost cells
+    // If we have both silicates and graphite, we need to add two sets of ghost cells
+    if( fSi>0 && fSi<1.0){
+        dust_nbins = NdustBins + 4*dust_nghost;
+    } else {
+        dust_nbins = NdustBins + 2*dust_nghost;
+    }
 
+    dadt   = (double *) malloc(dust_nbins*sizeof(double));  
+    number = (double *) malloc(dust_nbins*sizeof(double)); 
+    slope  = (double *) malloc(dust_nbins*sizeof(double)); 
+    Mnew   = (double *) malloc(dust_nbins*sizeof(double)); 
+    Nnew   = (double *) malloc(dust_nbins*sizeof(double)); 
+    Snew   = (double *) malloc(dust_nbins*sizeof(double)); 
 
-
-    // allocate all arrays
-    dadt   = (double *) malloc(NdustBins*sizeof(double));  
-    number = (double *) malloc(NdustBins*sizeof(double)); 
-    slope  = (double *) malloc(NdustBins*sizeof(double)); 
-    Mnew   = (double *) malloc(NdustBins*sizeof(double)); 
-    Nnew   = (double *) malloc(NdustBins*sizeof(double)); 
-    Snew   = (double *) malloc(NdustBins*sizeof(double)); 
-
+        
+    // determine where the cutoff point is for silicates
+    if(fSi < 1.0){
+        isilicone = Nabins;
+    } else {
+        isilicone = 0;
+    }
 
     // Set initial distribution
     getintegerdustpar("dust_initDist", &initDist);
@@ -318,7 +364,7 @@ int initDust(){
 
 // Set initial cell dust data, normalised such that everything in iabin >= 1 has a total mass matching the dustMass
 int setCellInit(int icell, double dustMass){
-    int ibin, iabin, graphite;
+    int idx, ibin, iabin, graphite;
     double mass;
     double Mtot_s, Mtot_c;
     double norm_s, norm_c, norm, Sj;
@@ -326,7 +372,8 @@ int setCellInit(int icell, double dustMass){
     Mtot_c = 0;
     Mtot_s = 0;
 
-    for(ibin = 0; ibin < NdustBins; ibin++){
+    for(idx = 0; idx < NdustBins; idx++){
+        ibin = globalToLocalIndex(idx);
         if(ibin < isilicone){
             graphite = 1;
         } else {
@@ -350,13 +397,14 @@ int setCellInit(int icell, double dustMass){
         } else {
             Mtot_s += mass;
         }
-        ustate[icell*nvar + IDUST_START + ibin*NdustVar]   = mass;
+        ustate[icell*nvar + IDUST_START + idx*NdustVar]   = mass;
     }
     
     norm_s = fSi*dustMass/Mtot_s;
     norm_c = (1-fSi)*dustMass/Mtot_c;
 
-    for(ibin = 0; ibin < NdustBins; ibin++){
+    for(idx = 0; idx < NdustBins; idx++){
+        ibin = globalToLocalIndex(idx);
         if(ibin < isilicone){
             graphite = 1;
         } else {
@@ -364,7 +412,7 @@ int setCellInit(int icell, double dustMass){
         }
 
         // Mass (density) in bin
-        mass = ustate[icell*nvar + IDUST_START + ibin*NdustVar];
+        mass = ustate[icell*nvar + IDUST_START + idx*NdustVar];
         Sj   = slope[ibin];
         // Normalize to match mass density
         if(graphite){
@@ -374,8 +422,8 @@ int setCellInit(int icell, double dustMass){
             mass = mass * norm_s;
             Sj   = Sj * norm_s;
         }
-        ustate[icell*nvar + IDUST_START + ibin*NdustVar] = mass;
-        ustate[icell*nvar + IDUST_START + ibin*NdustVar+1] = Sj;
+        ustate[icell*nvar + IDUST_START + idx*NdustVar] = mass;
+        ustate[icell*nvar + IDUST_START + idx*NdustVar+1] = Sj;
     }
 
     return 1;

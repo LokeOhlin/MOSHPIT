@@ -8,6 +8,45 @@
 #include "hydro.h"
 #include "radchem.h"
 #include "moshpit.h"
+/////////////////////////////////////////
+//
+//  General utility methods
+//
+/////////////////////////////////////////
+
+int globalToLocalIndex(int idx){
+    int ibin;
+    // idx = index in global dust bins (eg whats stored in cells)
+    // ibin = index in local dust bins (eg what is used internally)
+    // need to convert between the two
+    ibin = idx + dust_nghost;
+    // if ibin is outside of the number of size bins, 
+    // that means that we are on a different species and therefore
+    // need to account for 2 additional ghost cells
+    if(ibin >= Nabins - dust_nghost){
+        ibin += 2*dust_nghost;
+    }
+
+    return ibin;
+}
+int localToGlobalIndex(int ibin){
+    int idx;
+    // two options: 
+    // 1) multiple species and we're on the second one, 
+    //    need to remove three ghost cell
+    // 2) single species or at the first species
+    //    remove one ghost cell
+    if(ibin > Nabins) {
+        idx = ibin - 3*dust_nghost;
+    } else {
+        idx = ibin - dust_nghost;
+    }
+    return idx;
+}
+
+
+
+
 //////////////////////////////////////////
 //
 //  Methods to calculate dust absorption and optical depth
@@ -106,51 +145,18 @@ double intMj(int ibin, int iabin, double a, double dt){
 
 // use Mj and Nj to solve for slope
 double getSlope(double Nj, double Mj,int iabin){
-    double ac  = abin_c[iabin];
-    double aep = abin_e[iabin+1];
-    double ae  = abin_e[iabin];
-   
-    
-    double NfactP = pow(aep,4)/(4*(aep-ae));
-    double Nfact  = pow(ae ,4)/(4*(aep-ae));
-
-    double SfactP  = pow(aep,4)*(aep/5. - ac/4.);
-    double Sfact   = pow(ae ,4)*(ae /5. - ac/4.);
-
-    return (Mj - Nj*(NfactP - Nfact))/(SfactP -Sfact);
+    return (Mj - Nj*NfactM[iabin])/SfactM[iabin];
 
 }
 // use Mj and Sj to solve for Number
 double getNumber(double Sj, double Mj,int iabin){
-    double ac  = abin_c[iabin];
-    double aep = abin_e[iabin+1];
-    double ae  = abin_e[iabin];
-   
-    
-    double NfactP = pow(aep,4)/(4*(aep-ae));
-    double Nfact  = pow(ae ,4)/(4*(aep-ae));
-
-    double SfactP  = pow(aep,4)*(aep/5. - ac/4.);
-    double Sfact   = pow(ae ,4)*(ae /5. - ac/4.);
-
-    return (Mj - Sj*(SfactP - Sfact))/(NfactP - Nfact);
+    return (Mj - Sj*SfactM[iabin])/NfactM[iabin];
 
 }
 
 // use Nj and Sj to solve for Mass
 double getMass(double Nj, double Sj,int iabin){
-    double ac  = abin_c[iabin];
-    double aep = abin_e[iabin+1];
-    double ae  = abin_e[iabin];
-   
-    
-    double NfactP = pow(aep,4)/(4*(aep-ae));
-    double Nfact  = pow(ae ,4)/(4*(aep-ae));
-
-    double SfactP  = pow(aep,4)*(aep/5. - ac/4.);
-    double Sfact   = pow(ae ,4)*(ae /5. - ac/4.);
-
-    return Nj*(NfactP-Nfact) + Sj*(SfactP - Sfact);
+    return Nj*NfactM[iabin] + Sj*SfactM[iabin];
 }
 
 // Limit slope in cell if dnda goes negatie on either side.
@@ -176,7 +182,6 @@ int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, in
         if(dndap < 0){
             *Njnew = 0;
             *Sjnew = 0;
-//            printf("Warning : both left and right dust bin edges have dnda < 0. iabin =  %d \n", iabin);
             return 1;
         }
         // Do nothing 
@@ -186,25 +191,15 @@ int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, in
     }
 
     double Nfact_tot;
-        
-    double Nfact  = (pow(aep,4) - pow(ae ,4))/(4*(aep-ae));
-    
-    //double SfactP  = pow(aep,5)/5. - ac*pow(aep,4)/4.;
-    double SfactP  = pow(aep,4)*(aep/5. - ac/4.);
-    double Sfact   = pow(ae,4) *(ae /5. - ac/4.);
-    //double Sfact   = pow(ae ,5)/5. - ac*pow(ae ,4)/4.;
     if(dndap < 0){
-        Nfact_tot = (Nfact-(SfactP-Sfact)/dap/dac);
+        Nfact_tot = (NfactM[iabin]-SfactM[iabin]/dap/dac);
         *Njnew = Mj/Nfact_tot;
         *Sjnew = -*Njnew/dac/dap;
     } else if(dnda < 0){
-        Nfact_tot = (Nfact-(SfactP-Sfact)/dam/dac);
+        Nfact_tot = (NfactM[iabin]-SfactM[iabin]/dam/dac);
         *Njnew = Mj/Nfact_tot;
         *Sjnew = -*Njnew/dac/dam;
     }
-    
-//    Nj[0] = Mj/();
-//    Sj[0] = -Nj*div*div;
     return 1;    
 }
 
@@ -212,82 +207,118 @@ int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, in
 // we keep the lowest bin size for the moment as a "resevoir" with zero opacity
 // Assume all grains of size > amax have the size of amax. Update the average size of the grains in the bin
 // And determine numbers and slope to satisfy both the new average size and new mass
-int rebinn(double dt){
-    double Mn, Mnp, Nn, Nnp, Nntilde, Sn, Sntilde;
-    double ac  = abin_c[Nabins-1];
-    double aep = abin_e[Nabins];
-    double ae  = abin_e[Nabins-1];
+int rebinn_upper(double Nn, double Nnp, double Sn, double Mn, double Mnp, double *Nntilde, double *Sntilde){
     double average_a, average_a_tilde;
+    // Initial average
+    average_a = NfactA[Nabins-2] + SfactA[Nabins-2]*Sn/Nn; 
+    // Updated average
+    average_a_tilde = (Nn*average_a + Nnp*abin_e[Nabins-1])/(Nn+Nnp); 
 
-    double dac = aep - ae;
-    // Factor in fron of N and S in mass equation
-    double NfactM   = (pow(aep,4) - pow(ae ,4))/(4*(aep-ae));
-    
-    double SfactMP  = pow(aep,4)*(aep/5. - ac/4.);
-    double SfactM   = pow(ae ,4)*(ae /5. - ac/4.);
+    // calculate Ntilde based on new mass
+    *Nntilde = (Mn + Mnp) / (NfactM[Nabins-2] + (average_a_tilde - NfactA[Nabins-2])*SfactM[Nabins-2]/SfactA[Nabins-2]);
+    // finally solve for Stilde
+    *Sntilde = *Nntilde * (average_a_tilde - NfactA[Nabins-2])/SfactA[Nabins-2];  
+    return 1; 
+}
+int rebinn_lower(double Nn, double Nnm, double Sn, double Mn, double Mnm, double *Nntilde, double *Sntilde){
+    double average_a, average_a_tilde;
+    // Initial average
+    average_a = NfactA[1] + SfactA[1]*Sn/Nn; 
+    // Updated average
+    average_a_tilde = (Nn*average_a + Nnm*abin_e[1])/(Nn+Nnm); 
 
-    // Factors in front of N and S in average size equation
-    double SfactAP   = pow(aep,2)*(aep/3. - ac/2.);
-    double SfactA    = pow(ae ,2)*(ae /3. - ac/2.);
-    double NfactA    = 0.5*(aep*aep-ae*ae)/dac; 
-
-
+    // calculate Ntilde based on new mass
+    *Nntilde = (Mn + Mnm) / (NfactM[1] + (average_a_tilde - NfactA[1])*SfactM[1]/SfactA[1]);
+    // finally solve for Stilde
+    *Sntilde = *Nntilde * (average_a_tilde - NfactA[1])/SfactA[1];  
+    return 1; 
+}
+int rebinn(double dt){
+    int ierr;
+    double Mn, Mnp, Mnm, Nn, Nnp, Nnm, Nntilde, Sn, Sntilde;
     // If we have silicates
-    if(isilicone < NdustBins){
-        Mn  = Mnew[NdustBins-2];
-        Mnp = Mnew[NdustBins-1];
-        Nn  = Nnew[NdustBins-2];
-        Nnp = Nnew[NdustBins-1]; 
-        Sn  = Nnew[NdustBins-2];
-        if(Nnp > 0){ 
-            // Initial average
-            average_a = NfactA + (SfactAP - SfactA)*Sn/Nn; 
-            // Updated average
-            average_a_tilde = (Nn*average_a + Nnp*aep)/(Nn+Nnp); 
+    if(fSi > 0.0){
+        Mn  = Mnew[dust_nbins-2];
+        Mnp = Mnew[dust_nbins-1];
 
-            // calculate Ntilde based on new mass
-            Nntilde = (Mn+Mnp)/(NfactM + (average_a_tilde - NfactA)*(SfactMP-SfactM)/(SfactAP - SfactA));
-            // finally solve for Stilde
-            Sntilde = Nntilde * (average_a_tilde - NfactA)/(SfactAP-SfactA);  
-            
-            // Update the bins
-            Mnew[NdustBins-2] = Mn + Mnp;        
-            Nnew[NdustBins-2] = Nntilde;        
-            Snew[NdustBins-2] = Sntilde; 
-            
-            Mnew[NdustBins-1] = 0;      
-            Nnew[NdustBins-1] = 0;      
-            Snew[NdustBins-1] = 0;     
+        Nn  = Nnew[dust_nbins-2];
+        Nnp = Mnp/pow(abin_e[Nabins-1], 3);
+        
+        Sn  = Snew[dust_nbins-2];
+        
+        if(Nnp > 0){ 
+            // get updated bin values
+            ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
+
+            // Update the bins (and limit slope)
+            Mnew[dust_nbins-2] = Mn + Mnp;        
+            ierr = limitSlope(&Nnew[dust_nbins-2], &Snew[dust_nbins-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
+            Mnew[dust_nbins-1] = 0;      
+            Nnew[dust_nbins-1] = 0;      
+            Snew[dust_nbins-1] = 0;     
         } 
+        
+        Mn  = Mnew[isilicone+1];
+        Mnm = Mnew[isilicone];
+
+        Nn  = Nnew[isilicone+1];
+        Nnm = Mnm/pow(abin_e[1], 3);
+        
+        Sn  = Snew[isilicone+1];
+        
+        if(Nnm > 0){ 
+            // get updated bin values
+            ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
+
+            // Update the bins (and limit slope)
+            Mnew[isilicone+1] = Mn + Mnm;        
+            ierr = limitSlope(&Nnew[isilicone+1], &Snew[isilicone+1], Nntilde, Sntilde, Mn+Mnm, 1); 
+            Mnew[isilicone] = 0;      
+            Nnew[isilicone] = 0;      
+            Snew[isilicone] = 0;     
+        } 
+
     }
     // if we have graphite grains
     if( isilicone > 0){
         // not same for carbonious grains
         Mn  = Mnew[isilicone-2];
         Mnp = Mnew[isilicone-1];
+
         Nn  = Nnew[isilicone-2];
-        Nnp = Nnew[isilicone-1]; 
+        Nnp = Mnp/pow(abin_e[Nabins-1],3);
         Sn  = Snew[isilicone-2];
         // Do we have grains in ghost bin? if so fix
         if(Nnp > 0){
-            // Initial average
-            average_a = NfactA + (SfactAP - SfactA)*Sn/Nn; 
-            // Updated average
-            average_a_tilde = (Nn*average_a + Nnp*aep)/(Nn+Nnp); 
-
-            // calculate Ntilde based on new mass
-            Nntilde = (Mn+Mnp)/(NfactM + (average_a_tilde - NfactA)*(SfactMP-SfactM)/(SfactAP - SfactA));
-            // finally solve for Stilde
-            Sntilde = Nntilde * (average_a_tilde - NfactA)/(SfactAP-SfactA);  
-            // Update the bins
-            Mnew[isilicone-2] = Mn + Mnp;        
-            Nnew[isilicone-2] = Nntilde;        
-            Snew[isilicone-2] = Sntilde; 
+            // get updated bin values
+            ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
             
+            // Update the bins
+            Mnew[isilicone-2] = Mn + Mnp;
+            ierr = limitSlope(&Nnew[isilicone-2], &Snew[isilicone-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
             Mnew[isilicone-1] = 0;      
             Nnew[isilicone-1] = 0;      
             Snew[isilicone-1] = 0;  
         }    
+        
+        Mn  = Mnew[1];
+        Mnm = Mnew[0];
+
+        Nn  = Nnew[1];
+        Nnm = Mnm/pow(abin_e[1], 3);
+        
+        Sn  = Snew[1];
+        
+        if(Nnm > 0){ 
+            // get updated bin values
+            ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
+            // Update the bins (and limit slope)
+            Mnew[1] = Mn + Mnm;        
+            ierr = limitSlope(&Nnew[1], &Snew[1], Nntilde, Sntilde, Mn+Mnm, 1); 
+            Mnew[0] = 0;      
+            Nnew[0] = 0;      
+            Snew[0] = 0;     
+        } 
     }
     return 1; 
 }
@@ -309,7 +340,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
         // Calculate change in each bin and limit timestep in needed
         Mtot_old = 0;
         Ntot_old = 0;
-        for(ibin = 0; ibin < NdustBins; ibin++){
+        for(ibin = 0; ibin < dust_nbins; ibin++){
             if(ibin < isilicone){
                 graphite = 1;
             } else {
@@ -326,12 +357,9 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             //temp         = getDustTemp(abin_c[iabin], rpars);
                 
             dadt[ibin]   = get_dadt(abin_c[iabin], rpars);
-            if(ibin == 0) {
-                printf("dadt = %.4e\n", dadt[ibin]);
-            }    
             //see if we have to limit the step
-            if(number[ibin] > 0) {
-                dt = fmin(dt, dadt_lim * fabs((abin_e[iabin+1]-abin_e[iabin])/dadt[iabin]));
+            if(number[ibin] > 0 && dadt[ibin] > 0) {
+                dt = fmin(dt, dadt_lim * fabs((abin_e[iabin+1]-abin_e[iabin])/dadt[ibin]));
             }   
         }
         if(dt  < 0){
@@ -341,7 +369,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
         Ntot_mid = 0;
         Mtot_new = 0;
         // now loop over bins again and determine change between bins
-        for(ibin = 0; ibin < NdustBins; ibin++){
+        for(ibin = 0; ibin < dust_nbins; ibin++){
             // Graphite can only go into graphite bins
             // TODO: could be optimized with the dadt_lim limiter, since this restricts
             //       contributing bins to only a couple neighbours.
@@ -351,7 +379,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                 graphite = 1;
             } else {
                 rangeStart = isilicone;
-                rangeEnd   = NdustBins;
+                rangeEnd   = dust_nbins;
                 graphite = 0;
             }
             iabin = ibin - isilicone*(1-graphite);
@@ -386,14 +414,12 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             Mtot_new += Msum;
 
         }
-        //printf("N: %.4e -> %.4e %.4e %.4e| M: %.4e -> %.4e %.4e \n", Ntot_old, Ntot_mid,Ntot_new,(Ntot_new-Ntot_old)/Ntot_old, Mtot_old, Mtot_new, (Mtot_new-Mtot_old)/Mtot_old);
         ierr = rebinn(dt);
         if(ierr < 0){
             return -1;
         }
         // set arrays TODO: figure out reasonable "fail" limit and redo step at smaller stepsize if met
-
-        for(ibin = 0; ibin < NdustBins; ibin++){
+        for(ibin = 0; ibin < dust_nbins; ibin++){
             number[ibin] = Nnew[ibin];
             slope[ibin]  = Snew[ibin];
         }
@@ -414,11 +440,12 @@ int dustCell(double *rpars, int *ipars, double dt_step){
 ///////////////////////////////////////
 // Method to transfer cell data to smaller cells
 int setBinsCell(int icell, double *Mtot){
-    int ibin, iabin, graphite;
+    int idx, ibin, iabin, graphite;
     double norm, mass;
     
     *Mtot = 0;
-    for( ibin = 0; ibin < NdustBins; ibin++){
+    for( idx = 0; idx < NdustBins; idx++){
+        ibin = globalToLocalIndex(idx);
         if(ibin < isilicone){
             graphite = 1;
         } else {
@@ -430,9 +457,9 @@ int setBinsCell(int icell, double *Mtot){
 
 
         // Total number in bin stored as mass density 
-        mass = ustate[icell*nvar + IDUST_START + NdustVar*ibin];
+        mass = ustate[icell*nvar + IDUST_START + NdustVar*idx];
         // current slope assuming piecewise linear dnumda
-        slope[ibin]  = ustate[icell*nvar + IDUST_START + NdustVar*ibin + 1];
+        slope[ibin]  = ustate[icell*nvar + IDUST_START + NdustVar*idx + 1];
 
 
         // convert to number via total mass in cell
@@ -453,12 +480,13 @@ int setBinsCell(int icell, double *Mtot){
 }
 
 int getBinsCell(int icell, double *Mtot){
-    int ibin, iabin, graphite;
+    int idx, ibin, iabin, graphite;
     double norm, mass;
     
     *Mtot = 0;
 
-    for( ibin = 0; ibin < NdustBins; ibin++){
+    for( idx = 0; idx < NdustBins; idx++){
+        ibin = globalToLocalIndex(idx);
         if(ibin < isilicone){
             graphite = 1;
         } else {
@@ -478,8 +506,8 @@ int getBinsCell(int icell, double *Mtot){
         // Mass (density) in bin
         mass = getMass(number[ibin], slope[ibin], iabin);
         *Mtot = *Mtot + mass*norm;
-        ustate[icell*nvar + IDUST_START + NdustVar*ibin    ] = mass * norm;
-        ustate[icell*nvar + IDUST_START + NdustVar*ibin + 1] = slope[ibin];
+        ustate[icell*nvar + IDUST_START + NdustVar*idx    ] = mass * norm;
+        ustate[icell*nvar + IDUST_START + NdustVar*idx + 1] = slope[ibin];
     }
     printf("final dust density =  %.4e\n", *Mtot);
     return 1;

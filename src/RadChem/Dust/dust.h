@@ -2,6 +2,8 @@
 #define dust
 #include "dust.h"
 
+
+#define dust_nghost 1
 // Initialisation methods
 int initDust();
 int setCellInit(int icell, double dustMass);
@@ -25,12 +27,22 @@ double getMass  (double Nj, double Sj,int iabin);
 // Method to limit slope do avoid dnda < 0 anywhere
 int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, int iabin);
 
+// change from global index (eg index in cell data array) 
+// to what is used internally where we have ghost cells
+int globalToLocalIndex(int idx);
+int localToGlobalIndex(int ibin);
+
 // Main call to update dust distribution
 int dustCell(double *rpars, int *ipars, double dt_step);
 #endif
 // Scratch arrays
-extern double *dadt, *number, *slope, *Mnew, *Nnew, *Snew, *abin_e, *abin_c;
-extern int Nabins, isilicone;
+extern double *dadt, *number, *slope, *Mnew, *Nnew, *Snew;
+// Values that are only dependent on bin size and are constant
+extern double *abin_e, *abin_c;
+extern double *NfactM, *NfactA;
+extern double *SfactM, *SfactA; 
+
+extern int dust_nbins, Nabins, isilicone;
 // mass fraction of silicates
 extern double fSi;
 // density of silicates
