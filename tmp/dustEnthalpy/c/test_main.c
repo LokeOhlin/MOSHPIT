@@ -27,6 +27,9 @@ double *pi_asquare = NULL;
 int *ida_tabQabs   = NULL;
 int *ida_tabQem    = NULL;
 
+int isilicone;
+int dust_nbins;
+
 double bbody_wl(double wavelength, double Teff){
     double expo = planck*clght/(boltzmann*Teff*wavelength);
     if(expo > 500){
@@ -111,8 +114,49 @@ int writeTempdist(int ibin, double *Ts, long double *Ps, int graphite, int NTbin
 int main(){
     int ierr, iEbin, iint;
     ierr = loadDustRadiationTables();
+    
+    int ngrains = 100;
+    dust_nbins = ngrains;
+    isilicone = 50;
+    int ibin, iabin;
+    int graphite;
+    agrains = (double *) malloc(ngrains*sizeof(double));
+    Natoms  = (double *) malloc(ngrains*sizeof(double));
+    volgrains  = (double *) malloc(ngrains*sizeof(double));
+    pi_asquare  = (double *) malloc(ngrains*sizeof(double));
+    ida_tabQabs  = (int *) malloc(ngrains*sizeof(int));
+    ida_tabQem  = (int *) malloc(ngrains*sizeof(int));
+    
+    double amin = 3.5e-8;
+    double amax = 1.0e-3;
+    double da = exp((log(amax) - log(amin))/(0.5*ngrains));
+    double rho, matom;
+    for(ibin = 0; ibin < ngrains; ibin++){
+        if(ibin < isilicone){
+            iabin = ibin;
+            graphite = 1;
+            rho = rho_c;
+            matom = 1.675e-24 * 12.011;
+        }else{
+            iabin = ibin - isilicone;
+            graphite = 0;
+            rho = rho_s;
+            matom = 1.675e-24 * (28.086+2*24.305+4*15.999)/7.;
+        }
+        agrains[ibin] = amin*pow(da, iabin);
+        volgrains[ibin] = 4.*M_PI*pow(agrains[ibin],3.)/3.;
+        Natoms[ibin] = volgrains[ibin]*rho/matom; 
+        pi_asquare[ibin] = M_PI*agrains[ibin]*agrains[ibin];
+        ida_tabQabs[ibin] = getQabs_ida(agrains[ibin], graphite);
+        ida_tabQem[ibin]  = getQemAve_ida(agrains[ibin], graphite);
+    }
+    
+    
+    
+    
+    
     // number of radiation bins
-    int Nbins = 1000;
+    int Nbins = 50;
     // edges 
     int NbinsE = Nbins +1;
     // 
@@ -123,7 +167,7 @@ int main(){
     Ebins = (double *) malloc(NbinsE * sizeof(double));
     radData = (double *) malloc(2 * Nbins * sizeof(double));
 
-    double Emax = 13.6*electronVolt;
+    double Emax = 130.6*electronVolt;
     double Emin = 0.00001*electronVolt;
     double Emid = 0.5*electronVolt;
 
@@ -184,43 +228,9 @@ int main(){
         }
     }
     ierr = setRadiationBins(radData, 1.0, 1.0);
-    int NTbins = 500;
+    int NTbins = 200;
     
     
-    int ngrains = 100;
-    int isilicone = 50;
-    int ibin, iabin;
-    int graphite;
-    agrains = (double *) malloc(ngrains*sizeof(double));
-    Natoms  = (double *) malloc(ngrains*sizeof(double));
-    volgrains  = (double *) malloc(ngrains*sizeof(double));
-    pi_asquare  = (double *) malloc(ngrains*sizeof(double));
-    ida_tabQabs  = (int *) malloc(ngrains*sizeof(int));
-    ida_tabQem  = (int *) malloc(ngrains*sizeof(int));
-    
-    double amin = 3.5e-8;
-    double amax = 1.0e-4;
-    double da = exp((log(amax) - log(amin))/(0.5*ngrains));
-    double rho, matom;
-    for(ibin = 0; ibin < ngrains; ibin++){
-        if(ibin < isilicone){
-            iabin = ibin;
-            graphite = 1;
-            rho = rho_c;
-            matom = 1.675e-24 * 12.011;
-        }else{
-            iabin = ibin - isilicone;
-            graphite = 0;
-            rho = rho_s;
-            matom = 1.675e-24 * (28.086+2*24.305+4*15.999)/7.;
-        }
-        agrains[ibin] = amin*pow(da, iabin);
-        volgrains[ibin] = 4.*M_PI*pow(agrains[ibin],3.)/3.;
-        Natoms[ibin] = volgrains[ibin]*rho/matom; 
-        pi_asquare[ibin] = M_PI*agrains[ibin]*agrains[ibin];
-        ida_tabQabs[ibin] = getQabs_ida(agrains[ibin], graphite);
-        ida_tabQem[ibin]  = getQemAve_ida(agrains[ibin], graphite);
-    }
     
     ierr = initTemperatureDist(NTbins);
     double *Ts;
@@ -232,33 +242,41 @@ int main(){
     double TSS;
     double abs;
     double Tmax;
-    //for(ibin = 0; ibin < ngrains; ibin++){
-    //    if(ibin > isilicone){
-    //        graphite = 0;
-    //    } else {
-    //        graphite = 1;
-    //    }
-    //    abs = getAbsorption(ibin, graphite);
-    //    TSS  =  StableState_temperature(agrains[ibin], pi_asquare[ibin], ida_tabQem[ibin], graphite, abs, 0.1, 10000);  
-    //    Tmax = fmin(TSS*pow(10,fmax(fmin(-3-log10(agrains[ibin]),3),1)), 4e4);
-    //    printf("%.4e %.4e %.4e \n", agrains[ibin], TSS, Tmax);
-    //    ierr = getTemperatureDist(ibin, graphite, Tmax, Ts, Ps);
-    //    printf("last = %.4e %.4e \n", Ts[NTbins -1], Ps[NTbins-1]);
-    //    ierr = writeTempdist(ibin, Ts, Ps, graphite, NTbins);
-    //}
+    int Nruns = 50;
+    for(int run; run < Nruns; run++){
+        for(ibin = 0; ibin < ngrains; ibin++){
+            if(ibin > isilicone){
+                graphite = 0;
+            } else {
+                graphite = 1;
+            }
+            abs = getAbsorption(ibin, graphite);
+            TSS  =  StableState_temperature(agrains[ibin], pi_asquare[ibin], ida_tabQem[ibin], graphite, abs, 0.1, 10000);  
+            Tmax = fmin(TSS*pow(10,fmax(fmin(-3-log10(agrains[ibin]),3),1)), 4e4);
+        //    printf("%.4e %.4e %.4e \n", agrains[ibin], TSS, Tmax);
+            ierr = getTemperatureDist(ibin, graphite, Tmax, Ts, Ps);
+        //    printf("last = %.4e %.4e \n", Ts[NTbins -1], Ps[NTbins-1]);
+        //    ierr = writeTempdist(ibin, Ts, Ps, graphite, NTbins);
+        }
+    }
     clock_t end = clock();
     double cpu_time_used = ((double) (end - start))/CLOCKS_PER_SEC;
     printf("time per call: %f \n", cpu_time_used/ngrains);
-    printf("time for 1000 cells with 40 bins: %f \n", cpu_time_used*1e3*40/100);
-    ibin = 40;
+    printf("time for 1000 cells with 40 bins: %f \n", cpu_time_used*1e3*40/ngrains/Nruns);
+    ibin = 49;
     graphite = 1; 
-    abs = getAbsorption(ibin, graphite);
-    TSS  =  StableState_temperature(agrains[ibin], pi_asquare[ibin], ida_tabQem[ibin], graphite, abs, 0.1, 10000);  
-    Tmax = fmin(TSS*pow(10,fmax(fmin(-3-log10(agrains[ibin]),3),1)), 4e4);
-    //Tmax = 100;
-    printf("%.4e %.4e %.4e \n", agrains[ibin], TSS, Tmax);
-    ierr = getTemperatureDist(ibin, graphite, Tmax, Ts, Ps);
-    ierr = writeTempdist(ibin, Ts, Ps, graphite, NTbins);
+    
+    int ibins[5] = {0, 3, 10, 25, 49};
+    for (int i = 0; i < 5; i++){
+        ibin = ibins[i];
+        abs = getAbsorption(ibin, graphite);
+        TSS  =  StableState_temperature(agrains[ibin], pi_asquare[ibin], ida_tabQem[ibin], graphite, abs, 0.1, 10000);  
+        Tmax = fmin(TSS*pow(10,fmax(fmin(-3-log10(agrains[ibin]),3),1)), 4e4);
+        //Tmax = 100;
+        printf("%.4e %.4e %.4e \n", agrains[ibin], TSS, Tmax);
+        ierr = getTemperatureDist(ibin, graphite, Tmax, Ts, Ps);
+        ierr = writeTempdist(ibin, Ts, Ps, graphite, NTbins);
+    }
     //start = clock();
     //int imax = 1000;
     //for(ibin = 0; ibin < imax; ibin++){ 

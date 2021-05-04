@@ -18,13 +18,11 @@ double *Ul     = NULL;
 // Transisiton matrices A and B
 double *Amatr = NULL;
 double *Bmatr = NULL;
-
+double *Adivs = NULL;
+int matr_idxMax;
 double sigma_sb = 5.6704e-5;
 
 double get_Em(double agrain, double piaa, int ida, double temp, int graphite){ 
-    if(getQemAve(agrain, temp, graphite, ida, -1) < 0){
-        printf("!!!!!! %.4e \n", getQemAve(agrain, temp, graphite, ida, -1));
-    }
     return 4 * piaa * getQemAve(agrain, temp, graphite, ida, -1) * sigma_sb * pow(temp, 4);
 }
 
@@ -150,6 +148,8 @@ int initTemperatureDist(int Nbins){
     Ul     = (double *) malloc(Nbins * sizeof(double));
     Amatr  = (double *) malloc(Nbins * Nbins * sizeof(double));
     Bmatr  = (double *) malloc(Nbins * Nbins * sizeof(double));
+    Adivs  = (double *) malloc(Nbins * sizeof(double));
+    matr_idxMax = Nbins*Nbins;
 }
 
 
@@ -171,8 +171,9 @@ int getTemperatureDist(int ibin, int graphite, double Tmax, double *Ts, long dou
     // Emax is user set and should be large enough to not truncate distrubtion too excessively
     // and Emin is set such that the cooling and heating from frequent low energy photons,
     // eg. the processes we consider to be continous, is in equilibrium
-    int iUbin, fUbin, fUbinp, jUbin, idx, idxp;
-    double AiiSum, freq_if, freq_inf, Qabs, radEdens;
+    int iUbin, fUbin, fUbinp, jUbin, idx, idxp, imatr, imatrp;
+    double AiiSum, freq_if, E_inf, Qabs, radEdens;
+    double Uf, dUf, UfR, UfL;
     double agrain = agrains[ibin];
     double volgrain = volgrains[ibin];
     double Natom = Natoms[ibin];
@@ -187,19 +188,14 @@ int getTemperatureDist(int ibin, int graphite, double Tmax, double *Ts, long dou
     double nuCont = 2997924580.000;
     //double nuCont = 24180876579417.275;
     double ECont = nuCont*planck;
+    ECont = 0;
     // Absorbed energy rate from frequent photons (eg low energy photons with nu < nuCont)
-    double continous_absorption = getAbsorption_range(ibin, graphite, 0, nuCont);     
+    double continous_absorption = getAbsorption_range(ibin, graphite, 0.0, nuCont);     
     // Get "stable state" temperature for continous processes. initial range between 0.01 and 100... TODO: CHECKIF ALWAYS VALID!
     double Tmin = StableState_temperature(agrain, piaa, ida_Qem,  graphite, continous_absorption, 0.01, 100);
     double Emin = getUfromT(Natom, volgrain, Tmin, graphite);
     // populate Energy bins in log scale
     double delE = exp((log(Emax) - log(Emin))/NUbins);
-    //double delE = (Emax - Emin)/NUbins;
-    //if(delE < ECont){
-    //    printf("Too small bins\n");
-    //    return -1;
-    //} 
-    printf("Tmin = %.8e %.4e %.4e %.4e\n", Tmin, continous_absorption, delE/electronVolt, getRadEdens(delE/planck));
     
     
     Ubins[0] = Emin;
@@ -217,16 +213,19 @@ int getTemperatureDist(int ibin, int graphite, double Tmax, double *Ts, long dou
         Ps[iUbin] = 0;
     }
     // fix dUbins at upper and lower limit (remember dUbins[-1] = - (Ubins[-1] + Ubins[-2])/2 still)
-    dUbins[0] = 2*(dUbins[0] - Ubins[0]);       
+    dUbins[0] = 2*(dUbins[0] - Ubins[0]);
+    Ul[0] = Ubins[0] - 0.5 * dUbins[0];
+
     dUbins[NUbins - 1] = 2*(Ubins[NUbins - 1] + dUbins[NUbins -1]);
     // set matrices to zero
-    for(iUbin = 0; iUbin < NUbins*NUbins; iUbin++){
+    for(iUbin = 0; iUbin < matr_idxMax; iUbin++){
         Amatr[iUbin] = 0;
-        Bmatr[iUbin] = 0;
+        //Bmatr[iUbin] = 0;
     }
     
     // start populating transition A matrix
     // transition is going from ibin (initial) to fbin (final)
+    double old = 0;
     for(jUbin = 0; jUbin < NUbins-1; jUbin++){
         // continous cooling (since dUdt for Ubins[0] is defined as 0)
         fUbin = jUbin;
@@ -234,116 +233,110 @@ int getTemperatureDist(int ibin, int graphite, double Tmax, double *Ts, long dou
         idx = fUbin*NUbins + iUbin;
         Amatr[idx] = (get_Em(agrain, piaa, ida_Qem, Ts[iUbin], graphite) - continous_absorption)/(Ubins[iUbin] - Ubins[fUbin]); //dUbins[iUbin];
         
-        printf("%d %.4e %.4e %.4e \n", iUbin, Ts[iUbin], Ubins[iUbin]*planckInv, Ts[iUbin] * 5.879e10);
         // Discreete heating processes from lower energy bins
+        fUbinp = fUbin + 1;
+        imatr = fUbin*NUbins;
+        
+        Uf  = Ubins[fUbin];
+        UfL = Ul[fUbin];
+        UfR = Ul[fUbinp];
+        dUf = dUbins[fUbin];
+
         for(iUbin = 0; iUbin < fUbin; iUbin++){
-            idx = fUbin*NUbins + iUbin;
-            // frequency of photons needed to get from ibin to fbin
-            freq_if = (Ubins[fUbin] - Ubins[iUbin])*planckInv;         
-            //if(freq_if < nuCont){
-            //    continue;
-            //}
-            Qabs = getQabs(agrain, freq_if, graphite, ida_Qabs, -1);
-            radEdens = getRadEdens(freq_if);
-            double old = Qabs * piaa * radEdens * dUbins[fUbin]*clght*planckInv*planckInv/(freq_if);
-            Amatr[idx] =  getUpwardTransition(ibin, graphite, Ubins[iUbin], Ul[iUbin], Ul[iUbin+1], dUbins[iUbin],
-                                                              Ubins[fUbin], Ul[fUbin], Ul[fUbin+1], dUbins[fUbin], ECont);
-            //if(Amatr[idx] != Amatr[idx] || Amatr[idx] < 0){
-            //    printf("%d %d | %.4e %.4e %.4e", fUbin, iUbin, freq_if, Qabs, radEdens);
-            //}
+            idx = imatr + iUbin;
+            // Upward transition from iUbin to fUbin 
+            Amatr[idx] =  getUpwardTransition(ibin, graphite, Ubins[iUbin], Ul[iUbin], Ul[iUbin+1], dUbins[iUbin], Uf, UfL, UfR, dUf, ECont);
         }
+        // Account for intrabin transitions
+        iUbin = fUbin - 1;
+        idx    = imatr + iUbin;   
+        Amatr[idx] = Amatr[idx] + intrabinUpwardTransition(ibin, graphite, dUbins[iUbin], Ubins[iUbin], Uf);
+        
+
         // Add discreete heating from jbin to final bin.
         iUbin = jUbin;
         fUbin = NUbins - 1;
         idx = fUbin*NUbins + iUbin;
         
         // frequency of photons needed to get from iUbin to fUbin
-        freq_if = (Ubins[fUbin] - Ubins[iUbin])*planckInv;
-        //if(freq_if > nuCont){
-        Qabs = getQabs(agrain, freq_if, graphite, ida_Qabs, -1);
-        radEdens = getRadEdens(freq_if);
-        Amatr[idx] = Qabs * piaa * radEdens * dUbins[fUbin]*clght*planckInv*planckInv/(freq_if);
         Amatr[idx] =  getUpwardTransition(ibin, graphite, Ubins[iUbin], Ul[iUbin], Ul[iUbin+1], dUbins[iUbin],
                                                           Ubins[fUbin], Ul[fUbin], Ul[fUbin+1], dUbins[fUbin], ECont);
-        //} else {
-        //    Amatr[idx] = 0;
-        //}
+        if(iUbin == fUbin-1){
+            Amatr[idx] = Amatr[idx] + intrabinUpwardTransition(ibin, graphite, dUbins[iUbin], Ubins[iUbin], Ubins[fUbin]);
+        }
         
         // Last bin technically goes to infintity. Take this into account
-        freq_inf = (Ubins[fUbin] + dUbins[fUbin]*0.5 - Ubins[iUbin])*planckInv;
-        Amatr[idx] += getAbsorptionNum_range(ibin, graphite, freq_inf, 1e99); 
-        if(Amatr[idx] != Amatr[idx] || Amatr[idx] < 0){
-            printf("%d %d | %.4e %.4e | %.4e %.4e %.4e", fUbin, iUbin, freq_inf, getAbsorption_range(ibin, graphite, freq_inf, 1e99), freq_if, Qabs, radEdens);
-        }
+        E_inf = (Ubins[fUbin] + dUbins[fUbin]*0.5 - Ubins[iUbin]);
+        Amatr[idx] += getAbsorptionNum_range(ibin, graphite, E_inf, 1e99); 
     }
     // now do the diagonal elements ( eg. everything going out from bins)
     double check;
-    for(iUbin = 0; iUbin < NUbins; iUbin++){
+    for(fUbin = 0; fUbin < NUbins; fUbin++){
         AiiSum  = 0;
-        for(fUbin = 0; fUbin < NUbins; fUbin++){
-            idx = fUbin*NUbins + iUbin;
+        imatr = fUbin * NUbins;
+        // can only transition into fUbin from iUbin < fUbin
+        // or iUbin = fUbin + 1
+        for(iUbin = 0; iUbin < fUbin; iUbin++){
+            idx = imatr + iUbin;
             AiiSum -= Amatr[idx];
-            if(isfinite(AiiSum)==0){
-                printf("%d %d | %.4e", fUbin, iUbin, AiiSum);
-            }
         }
-        idx = (iUbin-1)*NUbins + iUbin;
-        check= fabs(AiiSum + Amatr[idx]);
-        printf("%d %.4e %.4e %.4e %.4e\n", iUbin, Ts[iUbin], check, Amatr[idx], check - Amatr[idx]);   
-        idx = iUbin*NUbins + iUbin;
+        if(fUbin < NUbins - 1){
+            idx = imatr + fUbin + 1;
+            AiiSum -= Amatr[idx];
+        }
+        idx = fUbin*NUbins + fUbin;
         Amatr[idx] = AiiSum;
+        if(fUbin >= 1){
+            idx = (fUbin-1)*NUbins + fUbin;
+            Adivs[fUbin] = 1/Amatr[idx];
+        }
     }
 
-    // Populate B matrix
-    // Start with top row
-    fUbin = NUbins - 1;
-    for(iUbin = 0; iUbin < fUbin; iUbin++){
-        idx = fUbin*NUbins + iUbin;
-        Bmatr[idx] = Amatr[idx];
-        //if(Bmatr[idx] < 0 || Bmatr[idx] != Bmatr[idx]){
-        //    printf("%d %d, %.4e \n", fUbin, iUbin, Amatr[idx]);
-        //    return -1;
-        //}
-    }
-    // Sum up the rest
+   // // Populate B matrix
+   // // Start with top row
+   // fUbin = NUbins - 1;
+   // for(iUbin = 0; iUbin < fUbin; iUbin++){
+   //     idx = fUbin*NUbins + iUbin;
+   //     Bmatr[idx] = Amatr[idx];
+   // }
+    
+    // We have what we need from the A matrix,
+    // we now store B matrix (guhathakurta & draine 1989) 
+    // in the A matrix to save some time
+    
     for(jUbin = 0; jUbin < NUbins-1; jUbin++){
-        fUbin  = NUbins - 2 - jUbin;
-        fUbinp = fUbin +1;
+        // imatr selects starting point in 1D array. 
+        // multiply with NUbins to save some time.
+        fUbin  = (NUbins - 2 - jUbin);
+        
+        imatr  = fUbin * NUbins;
+        imatrp = (fUbin + 1)*NUbins; 
         for(iUbin = 0; iUbin < fUbin; iUbin++){
-            idx  = fUbin  * NUbins + iUbin;
-            idxp = fUbinp * NUbins + iUbin;
-            Bmatr[idx] = Bmatr[idxp] + Amatr[idx];
-            if(Bmatr[idx] < 0 || isfinite(Bmatr[idx])==0){
-                printf("%d %d||| %.4e %.4e \n", fUbin, iUbin, Bmatr[idxp], Amatr[idx]);
-                return -1;
-            }
+            idx  = imatr  + iUbin;
+            idxp = imatrp + iUbin;
+            Amatr[idx] = Amatr[idxp] + Amatr[idx];
+            //Bmatr[idx] = Bmatr[idxp] + Amatr[idx];
         }
 
     }
     //Calculate probablilites
     Ps[0] = 1e-200;
     long double norm = Ps[0];
+    long double Pbin;
     for(fUbin = 1; fUbin < NUbins; fUbin++){
-        Ps[fUbin] = 0;
+        Pbin = 0;
+        idx = fUbin * NUbins;
         for(iUbin = 0; iUbin < fUbin; iUbin++){
-            idx = fUbin*NUbins + iUbin;
-            Ps[fUbin] += Bmatr[idx]*Ps[iUbin];
+            Pbin += Amatr[idx + iUbin]*Ps[iUbin];
         }
         idx = (fUbin-1)*NUbins + fUbin;
         
-        long double Psold = Ps[fUbin];
-        Ps[fUbin] = Ps[fUbin]/Amatr[idx];
-        if(isfinite(Ps[fUbin])==0 || Ps[fUbin] < 0){
-            printf("%.4Le %.4e %.4Le %.4Le\n", Ps[fUbin], Amatr[idx], Psold, Ps[fUbin-1]);
-            Psold = 0;
-            for(iUbin = 0; iUbin < fUbin; iUbin++){
-                idx = fUbin*NUbins + iUbin;
-                Psold += Bmatr[idx]*Ps[iUbin];
-                printf("%.4Le %.4e %.4Le \n", Psold, Bmatr[idx], Ps[iUbin]);
-            }
-            return -1;
-        }
+        //long double Psold = Ps[fUbin];
+        Ps[fUbin] = Pbin * Adivs[fUbin];
         norm += Ps[fUbin];
+    }
+    if(isfinite(norm) == 0){
+        printf("ERROR: DUST TEMPERATURE DISTRIBUTION NOT FINITE \n");
     }
     norm = 1/norm;
     for(fUbin = 0; fUbin < NUbins; fUbin++){

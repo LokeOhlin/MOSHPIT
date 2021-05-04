@@ -1,6 +1,7 @@
 #/bin/bash
 
-CFLAGS="-O3 -lm -pg"
+#CFLAGS="-g -lm "
+CFLAGS="-O3 -lm -g"
 
 gcc -c string_utils.c -o string_utils.o $CFLAGS
 gcc -c run_utils.c -o run_utils.o $CFLAGS

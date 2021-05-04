@@ -34,7 +34,7 @@ int setRadiationBins(double *radData, double dt, double geoFact);
 // Method to get the absorption of a dust grain from all radiation bins
 double getAbsorption(int ibin, int graphite);
 // Same but for all bins within range
-double getAbsorption_range(int ibin, int graphite, double nuMin, double nuMax);
+double getAbsorption_range(int ibin, int graphite, double Emin, double Emax);
 double getAbsorptionNum_range(int ibin, int graphite, double nuMin, double nuMax);
 // Method to get energy density of photons of frequency freq (u_\nu)
 double getRadEdens(double freq);
@@ -45,4 +45,5 @@ double StableState_temperature(double agrain, double piaa, int ida, int graphite
 
 double get_Em(double agrain, double piaa, int ida, double temp, int graphite);
 double getUpwardTransition(int ibin, int graphite, double Ui, double UiL, double UiR, double dUi,     double Uf, double UfL, double UfR, double dUf, double continousBound);
+double intrabinUpwardTransition(int ibin, int graphite, double dUi, double Ui, double Uf);
 #endif
