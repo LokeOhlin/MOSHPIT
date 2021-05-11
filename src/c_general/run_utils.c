@@ -11,36 +11,30 @@
 
 // Search methods 
 int binarySearch(double val, double *array, int size){
-    int idx;
-    int found = 0;
-    int min = 0, max = size-1;     
-    while(found == 0){
-        idx = (max + min) / 2;
+    unsigned int idx;
+    unsigned int two = 2;
+    unsigned int min = 0, max = size-1;     
+    // Check if at end points
+    if(val >= array[max]){
+        return max;
+    }
+    if(val <= array[min]){
+        return min;    
+    }  
+    while(min < max){
+        idx = (max + min)/two;
 
-        // Check if at end points
-        if(idx == size -1){
-            if(val>=array[idx]){
-                found = 1;
-                break;
-            }
-        } else if (idx == 0){
-            if(val < array[idx+1]){
-                found = 1;
-                break;
-            }
-        }
-
-        if((val>=array[idx]) && (val<array[idx+1])){
-            found = 1;
-            break;
-        }
-        if((val>array[idx])){
+        if(val>=array[idx]){
+            // if val > array[index+1] move min to index+1
             min = idx + 1;
-        } else if(val<array[idx]) {
-            max = idx - 1;
+        } else { // if val < array[index] move max to index
+            max = idx;
         }
     }
-    return idx;
+    if ( val < array[idx]){
+        idx = idx -1;
+    }
+    return (int)idx;
 }   
 
 int sequentialSearch(double val, double *array, int size){
