@@ -8,9 +8,10 @@
 #include "radchem.h"
 #include "cgeneral.h"
 #include "dust.h"
+#ifdef useDust
 int nrealDustPars = 12;
 real_list_t *dustDPars = NULL;
-int nintDustPars = 2;
+int nintDustPars = 5;
 int_list_t *dustIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
@@ -86,6 +87,9 @@ int setDustPars(){
     // Integer parameters
     strcpy(dustIPars[0].name, "dust_initDist"); dustIPars[0].value = 0;
     strcpy(dustIPars[1].name, "dust_dadt_mode"); dustIPars[1].value = 0;
+    strcpy(dustIPars[2].name, "dust_useRadiation"); dustIPars[2].value = 0;
+    strcpy(dustIPars[3].name, "dust_useSublimation"); dustIPars[3].value = 0;
+    strcpy(dustIPars[4].name, "dust_nTempBins"); dustIPars[4].value = 200;
     return 1;
 }
 
@@ -255,7 +259,7 @@ int initDustPowerLaw(){
 
 
 int initDust(){
-    int ierr, ibin;
+    int ierr, ibin, idx;
     double amin, amax, da;
     double ae, aep, ac;
     // Number of dust size bins per species
@@ -358,6 +362,28 @@ int initDust(){
 
     // timestep limiters
     getrealdustpar("dust_dadt_lim", &dadt_lim);
+    
+    
+    if(useRadiation){
+        // allocate  
+        ida_tabQabs  = (int *) malloc(dust_nbins*sizeof(int));
+        ida_tabQem  = (int *) malloc(dust_nbins*sizeof(int));
+        for(idx = 0; idx < NdustBins; idx++){
+            ibin = globalToLocalIndex(idx);
+            if(ibin < isilicone){
+                graphite = 1;
+            } else {
+                graphite = 0;
+            }
+            ida_tabQabs[ibin] = getQabs_ida(abin_c[ibin], graphite);
+            ida_tabQem[ibin]  = getQemAve_ida(abin_c[ibin], graphite);
+        }
+
+        if(useSublimation){
+        }
+    }
+    
+    
     return 1;
 }
 
@@ -428,4 +454,4 @@ int setCellInit(int icell, double dustMass){
 
     return 1;
 }
-
+#endif

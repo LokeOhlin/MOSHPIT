@@ -8,6 +8,8 @@
 #include "hydro.h"
 #include "radchem.h"
 #include "moshpit.h"
+
+#ifdef useDust
 /////////////////////////////////////////
 //
 //  General utility methods
@@ -514,4 +516,4 @@ int getBinsCell(int icell, double *Mtot){
 
 }
 
-
+#endif
