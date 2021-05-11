@@ -11,9 +11,9 @@
     #include "dust.h"
 #endif
 
-int nrealPars = 24;
+int nrealPars = 26;
 real_list_t *chemDPars = NULL;
-int nintPars = 11;
+int nintPars = 13;
 int_list_t *chemIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
@@ -35,14 +35,14 @@ int setChemistryPars(){
     chemIPars = (int_list_t *) malloc(nintPars * sizeof(int_list_t));
 
     // Real/Double parameters
-    strcpy(chemDPars[0].name, "ch_deff");                     chemDPars[0].value = 1.0; 
-    strcpy(chemDPars[1].name, "ch_abundHe");                  chemDPars[1].value = 0.1; 
-    strcpy(chemDPars[2].name, "ch_abundC");                   chemDPars[2].value = 1.4e-4; 
-    strcpy(chemDPars[3].name, "ch_abundO");                   chemDPars[3].value = 3.2e-4;
-    strcpy(chemDPars[4].name, "ch_abundSi");                  chemDPars[4].value = 1.5e-5;
-    strcpy(chemDPars[5].name, "ch_abundD");                   chemDPars[5].value = 2.6e-5;
-    strcpy(chemDPars[6].name, "ch_abundM");                   chemDPars[6].value = 1e-7;
-    strcpy(chemDPars[7].name, "ch_abundN");                   chemDPars[7].value = 1.5e-5;
+    strcpy(chemDPars[0].name, "ch_deff");                  chemDPars[0].value = 1.0; 
+    strcpy(chemDPars[1].name, "ch_abundHe");               chemDPars[1].value = 0.1; 
+    strcpy(chemDPars[2].name, "ch_abundC");                chemDPars[2].value = 1.4e-4; 
+    strcpy(chemDPars[3].name, "ch_abundO");                chemDPars[3].value = 3.2e-4;
+    strcpy(chemDPars[4].name, "ch_abundSi");               chemDPars[4].value = 1.5e-5;
+    strcpy(chemDPars[5].name, "ch_abundD");                chemDPars[5].value = 2.6e-5;
+    strcpy(chemDPars[6].name, "ch_abundM");                chemDPars[6].value = 1e-7;
+    strcpy(chemDPars[7].name, "ch_abundN");                chemDPars[7].value = 1.5e-5;
     strcpy(chemDPars[8].name, "ch_G0");                    chemDPars[8].value = 1.7e0;
     strcpy(chemDPars[9].name, "ch_f_rsc");                 chemDPars[9].value = 1e0;
     strcpy(chemDPars[10].name, "ch_phi_pah");              chemDPars[10].value = 0.5;
@@ -59,6 +59,8 @@ int setChemistryPars(){
     strcpy(chemDPars[21].name, "ch_max_ion_frac_change");  chemDPars[21].value = 1e-1;
     strcpy(chemDPars[22].name, "Tstar");  chemDPars[22].value = 5e3;
     strcpy(chemDPars[23].name, "Lstar");  chemDPars[23].value = 1e5;
+    strcpy(chemDPars[24].name, "radEmin");  chemDPars[24].value = 1.6e-17;
+    strcpy(chemDPars[25].name, "radEmax");  chemDPars[25].value = 1.6e-10;
     
     // Integer parameters
     strcpy(chemIPars[0].name, "ch_iphoto");               chemIPars[0].value =  0;
@@ -72,6 +74,8 @@ int setChemistryPars(){
     strcpy(chemIPars[8].name, "ch_no_chem");              chemIPars[8].value =  0;
     strcpy(chemIPars[9].name, "ch_use_photo_eqb_approx"); chemIPars[9].value =  0;
     strcpy(chemIPars[10].name, "radiationPressure");      chemIPars[10].value =  1;
+    strcpy(chemIPars[11].name, "numBinsSubIon");       chemIPars[11].value = 30;
+    strcpy(chemIPars[12].name, "numBinsFullIon");      chemIPars[12].value = 10;
     return 1;
 }
 
@@ -134,9 +138,10 @@ int initChemistry(){
     
     //Init radiation
     initRadiation();
-    
+#ifdef useDust 
     //Init Dust
-    initDust();    
+    initDust();
+#endif    
     return 1;
 
 }

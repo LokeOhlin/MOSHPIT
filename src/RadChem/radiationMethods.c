@@ -8,6 +8,11 @@
 #include "radchem.h"
 
 int useRadiationPressure;
+double radEmin, radEmax;
+int numBinsSubIon;
+int numBinsFullIon;
+int numRadiationBins;
+int iE112, iE136, iE152;
 
 double clght  = 29979245800.0;
 double ionE   = 2.17863955e-11;
@@ -31,99 +36,188 @@ double Ndis0 = 0;
 double Nion0 = 0;
 double NionH20 = 0;
 
+double *EbinEdges;
+double *aveEphots;
+double *Nphots;
+
 double Edis;
 double Eion;
-double EionH;
-double EionH2;
+double *EionH;
+double *EionH2;
 
 double sigmaLW = 2.46e-18;
 double sion;
-double sionH;
-double sionH2;
+double *sionH;
+double *sionH2;
 
 void initRadiation(){
-        double Teff;
-        double Lstar; 
-        double RstarSQ;
-        double inf = -1.0;
-        double sigma0   = 6.30e-18;
-        double sigma0H  = 4.5125966e-18;
-        double boltzy = 5.6704e-5;
-        double Lsun   = 3.838e+33;
-        double tmp = 1.0, tmp2;
-        
-        getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
-        getrealchemistrypar("ch_AV_conversion_factor", &AV_conversion_factor);
+    int iEbin;
+    double delE;
+    double Teff;
+    double Lstar; 
+    double RstarSQ;
+    double inf = -1.0;
+    double sigma0   = 6.30e-18;
+    double sigma0H  = 4.5125966e-18;
+    double boltzy = 5.6704e-5;
+    double Lsun   = 3.838e+33;
+    double tmp = 1.0, tmp2;
+    
+    getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
+    getrealchemistrypar("ch_AV_conversion_factor", &AV_conversion_factor);
    
-        getintegerchemistrypar("radiationPressure", &useRadiationPressure);
-   
-        getrealchemistrypar("Tstar", &Teff);
-        getrealchemistrypar("Lstar", &Lstar);
+    getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
+    getrealchemistrypar("ch_AV_conversion_factor", &AV_conversion_factor);
+    
+    getintegerchemistrypar("radiationPressure", &useRadiationPressure);
+    getintegerchemistrypar("numBinsSubIon", &numBinsSubIon);
+    getintegerchemistrypar("numBinsFullIon", &numBinsFullIon);
+    getrealchemistrypar("radEmin", &radEmin);
+    getrealchemistrypar("radEmax", &radEmax);
 
-        RstarSQ = Lstar * Lsun/(4*M_PI*Teff*Teff*Teff*Teff*boltzy);
+    
+    numRadiationBins = numBinsSubIon + numBinsFullIon + 2;
+    iE112 = numBinsSubIon;
+    iE136 = iE112  + 1;
+    iE152 = iE136  + 1;
 
-        // 13.6 to 15.2
-        getsourceemission_(&Teff, &ionE, &ionEH2, &sigma0, &Eion, &Nion0, &sion);
-        Nion0 = Nion0*4.0*M_PI*RstarSQ;
-        sion  = sion*4.0*M_PI*RstarSQ/Nion0;
-        Eion  = Eion - ionE;
+    EbinEdges = (double * ) malloc((numRadiationBins + 1) * sizeof(double));
+    // populate bins below 11.2 eV
+    // Do it in logscale TODO: make user switchable to linear
+    delE = exp((log(dissE) - log(radEmin))/(numBinsSubIon + 1));
+    for(iEbin = 0; iEbin < iE112; iEbin++){
+        EbinEdges[iEbin] = radEmin * pow(delE, iEbin);
+    }
 
-        // 15.2 to inf
-        getsourceemission_(&Teff, &ionEH2, &inf, &sigma0H, &EionH, &NionH20, &sionH);
+    // 11.2 eV
+    EbinEdges[iE112] = dissE;
+    
+    // 13.6 eV
+    EbinEdges[iE136] = ionE;
+
+    // 15.2 eV and above
+    delE = exp((log(radEmax) - log(ionEH2))/(numBinsFullIon + 1)); 
+    for(iEbin = iE152; iEbin < numRadiationBins + 1; iEbin++){
+        EbinEdges[iEbin] = ionEH2 * pow(delE, iEbin - iE152);
+    }
+
+    aveEphots = (double * ) malloc((numRadiationBins) * sizeof(double));
+    Nphots    = (double * ) malloc((numRadiationBins) * sizeof(double));
+    
+    
+    EionH  = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
+    EionH2 = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
+    sionH  = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
+    sionH2 = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
+    
+
+    
+
+    getrealchemistrypar("Tstar", &Teff);
+    getrealchemistrypar("Lstar", &Lstar);
+
+    RstarSQ = Lstar * Lsun/(4*M_PI*Teff*Teff*Teff*Teff*boltzy);
+
+    // treat the special bins
+    // 13.6 to 15.2
+#ifdef TESTATOMONLY
+// TESTATOM: only atomic, set all bins to zero, except one which contains all p>13.6 photons
+    Nphots[iE136]    = 1e49;
+    aveEphots[iE136] = 2.49912e-11;
+    sionH[0]     = 6.3e-18;
+    EionH[0]     = 3.204e-12;
+    sionH2[0]    = 0;
+    EionH2[0]    = 0;
+#else
+    getsourceemission_(&Teff, &ionE, &ionEH2, &sigma0, &Eion, &Nion0, &sion);
+    Nion0 = Nion0*4.0*M_PI*RstarSQ;
+    sion  = sion*4.0*M_PI*RstarSQ/Nion0;
+
+    Nphots[iE136]    = Nion0; 
+    aveEphots[iE136] = Eion;
+    sionH [0] = sion;
+    sionH2[0] = sigmaLW;
+    
+    Eion  = Eion - ionE;
+    EionH [0] = Eion;
+    EionH2[0] = Eion;
+#endif
+
+    //11.2 - 13.6
+#ifdef TESTATOMONLY
+    Nphots[iE112]    = 0;
+    aveEphots[iE112] = 0;
+#else
+    getemissionsigma_(&Teff, &dissE, &ionE, &tmp, &Edis, &Ndis0);
+    Ndis0 = Ndis0*4.0*M_PI*RstarSQ;
+
+    Nphots[iE112]    = Ndis0;
+    aveEphots[iE112] = Edis; 
+#endif
+
+    // 15.2 to Emax
+    for(iEbin = 0; iEbin < numBinsFullIon; iEbin++){
+#ifdef TESTATOMONLY
+        Nphots[iEbin + iE152] = 0;
+        aveEphots[iEbin + iE152] = EbinEdges[iEbin + iE152];
+        sionH[iEbin + 1]  = 0;
+        EionH[iEbin + 1]  = 0;
+        sionH2[iEbin + 1] = 0;
+        EionH2[iEbin + 1] = 0;
+#else
+        getsourceemission_(&Teff, &EbinEdges[iEbin + iE152], &EbinEdges[iEbin + 1 + iE152], &sigma0H, &Eion, &NionH20, &sion);
         NionH20 = NionH20*4.0*M_PI*RstarSQ;
-        sionH = sionH*4.0*M_PI*RstarSQ/NionH20;
-        EionH = EionH - ionE;
+        Nphots[iEbin + iE152] = NionH20;
+        sionH[iEbin + 1] = sion*4.0*M_PI*RstarSQ/NionH20;
+        aveEphots[iEbin + iE152] = Eion; 
+        EionH[iEbin + 1] = Eion - ionE;
 
-        directh2_(&Teff, &ionEH2, &inf, &EionH2, &sionH2);
-        sionH2 = sionH2*4.0*M_PI*RstarSQ/NionH20;
-        EionH2 = EionH2 - ionEH2;
-        printf("Nphot > 13.6  = %.4e \n", NionH20 + Nion0);
-        //11.2 - 13.6
-        getemissionsigma_(&Teff, &dissE, &ionE, &tmp, &Edis, &Ndis0);
-        Ndis0 = Ndis0*4.0*M_PI*RstarSQ;
 
-        //5.6 -11.2
-        getemissionsigma_(&Teff, &heatE, &dissE, &tmp, &tmp2, &Npeh0);
-        Npeh0 = Npeh0*4.0*M_PI*RstarSQ*tmp2;
+        directh2_(&Teff, &EbinEdges[iEbin + iE152], &EbinEdges[iEbin + 1 + iE152], &Eion, &sion);
+        sionH2[iEbin+1] = sion*4.0*M_PI*RstarSQ/NionH20;
+        EionH2[iEbin+1] = Eion - ionEH2;
+#endif
+    } 
+
+    //5.6 -11.2
+    for(iEbin = 0; iEbin < numBinsSubIon; iEbin++){
+#ifdef TESTATOMONLY
+        Nphots[iEbin] = 0;
+        aveEphots[iEbin] = EbinEdges[iEbin];
+#else
+        getemissionsigma_(&Teff, &EbinEdges[iEbin], &EbinEdges[iEbin+1], &tmp, &Edis, &Npeh0);
+        Nphots[iEbin] = Npeh0*4.0*M_PI*RstarSQ;
+        aveEphots[iEbin] = Edis;
+#endif
+    }
 }
 void setRadiationData(double *radData, double dt){
         // set intial package data
         // Number of photons 
-        radData[0] = Npeh0;     // 5.6 - 11.2  eV no dt here...
-        radData[1] = Ndis0*dt;     // 11.2 - 13.6 eV
-        radData[2] = Nion0*dt;     // 13.6 - 15.2 eV
-        radData[3] = NionH20*dt;   // 15.2 - inf  eV
-
-        // Energies per photon  
-        radData[4] = Edis;      // 11.2 - 13.6 eV
-        radData[5] = Eion;      // 13.6 - 15.2 eV here its the ionisation energy eg Eion = Ephot - 13.6
-        radData[6] = EionH;     // 15.2 - inf  eV ionisation of H  (EionH = Ephot - 13.6)
-        radData[7] = EionH2;    // 15.2 - inf  eV ionisation of H2 (EionH2 = Ephot - 15.2)
-
-        // Photon average cross sections
-        radData[8]  = sion;       // 13.6 - 15.2 eV atomic hydrogen
-        radData[9]  = sionH;      // 15.2 - inf  eV atomic hydrogen
-        radData[10] = sionH2;     // 15.2 - inf  eV molecular hydrogen
-    
-        // Columdensities and cumulative attenuations
-        radData[11] = 0;
-        radData[12] = 0;
-        radData[13] = 0;
+        int iEbin;
+        for(iEbin = 0; iEbin < numRadiationBins; iEbin++){
+            radData[iEbin] = Nphots[iEbin] * dt;     
+            radData[iEbin + numRadiationBins] = aveEphots[iEbin]; 
+        }
+        radData[2*numRadiationBins]     = 0;
+        radData[2*numRadiationBins + 1] = 0;
+        radData[2*numRadiationBins + 2] = 0;
 }
 
 
 void cellAbsorption(double *radData, double *specData, double numd, double Temp, double dr, double volcell, double dt, double *absData){
+    int iEbin, allDone;
     // Radiation specific variables
-    double Npeh, Ndis, Nion, NionH2, sion, sionH, sionH2, Edis, Eion, EionH, EionH2;
+    double Npeh, Ndis, Nion, NionH2, Edis, Eion, EionH, EionH2, nphots, ephots;
     // Species data
     double numdr, xH, xH2, xHp;
     // Column densities
     double Hcolm, HcolmOld, H2colm, H2colmOld, Av, AvOld, dAv, normH2, normH2Old;
     // Optical depths
-    double taud5In, taud5Out, Dtaud5, taud11In, taud11Out, Dtaud11, DtauH, DtauH2, DtauD, tauTot;
+    double taud11In, taud11Out, Dtaud11, DtauH, DtauH2, DtauD, tauTot;
     // Attenuation from dust and shielding from H2 in 5.2-13.6 bins
-    double eAttd5_avg, eAttd11_avg, eDAttd11_avg, fshieldIn, fshield_avg, fabs_in, Ndis_in, dNH211, dNdust11;
-    double DNionH, DNionH2, DNdust, NabsTot;
+    double eAttavg, eAttd11_avg, eDAttd11_avg, fshieldIn, fshield_avg, fabs_in, Ndis_in, dNH211, dNdust11;
+    double DNionH, DNionH2, DNdust, NabsTot, dNdust;
     // Rates and associated energies
     double kUV, kion, phih, hvphih, kdis, phih2, hvphih2, dEdust, EtotPe;
     // Momentum injection
@@ -131,19 +225,6 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     // Ugly
     double tmp, tmp2, norm;
 
-    // Get radiation data
-    Npeh   = radData[0];
-    Ndis   = radData[1];
-    Nion   = radData[2];
-    NionH2 = radData[3];
-    Edis   = radData[4];
-    Eion   = radData[5];
-    EionH  = radData[6];
-    EionH2 = radData[7];
-    sion   = radData[8];
-    sionH  = radData[9];
-    sionH2 = 0;// radData[10];
-    // initialise variables
     DustEabs  = 0;
     DustMom   = 0;
     EtotPe    = 0;
@@ -164,277 +245,218 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
 
     numdr = numd*dr;
     // Total up untill this point
-    HcolmOld  = radData[11];
-    H2colmOld = radData[12];
-    AvOld     = radData[13];
+    HcolmOld  = radData[2*numRadiationBins];
+    H2colmOld = radData[2*numRadiationBins + 1];
+    AvOld     = radData[2*numRadiationBins + 2];
 
     Hcolm  = HcolmOld  + numdr*(2*xH2+xH+xHp);
     H2colm = H2colmOld + numdr*xH2;
 
-#ifdef useDust
-    // Calculate local absorption based on the size distribution of the local dust
+#ifndef useDust
     dAv = AV_conversion_factor*numdr*(2.0*xH2+xH2+xHp);//*exp(-Temp/Temp_lim);
-#else
-    dAv = AV_conversion_factor*numdr*(2.0*xH2+xH2+xHp);//*exp(-Temp/Temp_lim);
-#endif
     Av = AvOld + dAv;
-
+#endif
 
     /////////////////////////////////////////////////////
     //
-    //      5.6 - 11.2 eV
+    //  Emin - 11.2 eV
     //
-        
+    for(iEbin = 0; iEbin < iE112; iEbin++){    
+        nphots = radData[iEbin];
+        if(nphots <= 0){
+            continue;
+        }
+        allDone = 0;
+        ephots = radData[iEbin + numRadiationBins];
 #ifdef useDust
     // Calculate the total optical depth from dust of these photons and how much they absorb
-    taud5In  = dustAtt5 * AvOld * dust_to_gas_ratio; 
-    taud5Out = dustAtt5 * Av    * dust_to_gas_ratio; 
-    Dtaud5   = dustAtt5 * dAv   * dust_to_gas_ratio; 
-    if(Dtaud5 > 1e-11){
-        dEdust = Npeh * dt * (exp(-taud5In)- exp(-taud5Out));
-    } else {
-        dEdust = Npeh * dt * exp(-taud5In) * ( Dtaud5 - 0.5 * Dtaud5 * Dtaud5);
-    }
-    DustEabs = DustEabs + dEdust/dt;
+        DtauD = getDustOpticalDepth(iEbin, dr); 
 #else
-    taud5In  = dustAtt5 * AvOld * dust_to_gas_ratio; 
-    taud5Out = dustAtt5 * Av    * dust_to_gas_ratio; 
-    Dtaud5   = dustAtt5 * dAv   * dust_to_gas_ratio; 
-    if(Dtaud5 > 1e-11){
-        dEdust = Npeh * dt * (exp(-taud5In)- exp(-taud5Out));
-    } else {
-        dEdust = Npeh * dt * exp(-taud5In) * ( Dtaud5 - 0.5 * Dtaud5 * Dtaud5);
-    }
-    DustEabs = DustEabs + dEdust/dt;
+        //TODO: change dustAtt to array with dust size averaged cross sections.
+        DtauD    = dustAtt5 * dAv   * dust_to_gas_ratio; 
 #endif 
-    DustMom = DustMom + dEdust/clght;
-    if(Dtaud5 > 1e-11) { 
-        eAttd5_avg = 1.0/Dtaud5 * (exp(-taud5In) - exp(-taud5Out));
-    } else {
-        eAttd5_avg = exp(-taud5In)*(1.0 - 0.5*Dtaud5);
-    }
+        if(DtauD > 1e-11){
+            dNdust = nphots * (1 - exp(-DtauD));
+        } else {
+            dNdust = nphots * ( DtauD - 0.5 * DtauD * DtauD);
+        }
+        DustEabs = DustEabs + dNdust * ephots;
+        DustMom  = DustMom  + dNdust * ephots/clght;
+        if(DtauD > 1e-11) { 
+            eAttavg = 1.0/DtauD * ( 1 - exp(-DtauD));
+        } else {
+            eAttavg = (1.0 - 0.5*DtauD);
+        }
 
-    // Add to photo electric heating effect
-    EtotPe += Npeh*eAttd5_avg;
-    
+        // Add to photo electric heating effect
+        EtotPe += nphots*eAttavg*ephots/dt;
+
+        // remove photons from bin
+        nphots = nphots - dNdust;
+        if(nphots < 0){
+            nphots = 0;
+        }
+        radData[iEbin] = nphots;
+    }
         
     /////////////////////////////////////////////////////
     //
     //      11.2 - 13.6 eV
     //
-    
+    //      To properly deal with H2 self shielding,
+    //      we store the extinction of this bin
+    //      
+    //      Ndis = number of photons originally in this bin
+    //      nphots = current number of photons.
+
+    nphots = radData[iE112];
+    if(nphots > 0){
+        allDone = 0;
+        Ndis      = Nphots[iE112];
+        Edis      = radData[iE112+numRadiationBins];
+     
 #ifdef useDust
-    // Calculate the total optical depth from dust of these photons and how much they absorb
-    taud11In  = dustAtt11 * AvOld * dust_to_gas_ratio; 
-    taud11Out = dustAtt11 * Av    * dust_to_gas_ratio; 
-    Dtaud11   = dustAtt11 * dAv   * dust_to_gas_ratio; 
+        // Calculate the total optical depth from dust of these photons and how much they absorb
+        taud11In  = AvOld; 
+        DtauD = getDustOpticalDepth(iE112, dr)
+        taud11Out = AvOld + DtauD; 
+        Av = taud11Out;
 #else
-    taud11In  = dustAtt11 * AvOld * dust_to_gas_ratio; 
-    taud11Out = dustAtt11 * Av    * dust_to_gas_ratio; 
-    Dtaud11   = dustAtt11 * dAv   * dust_to_gas_ratio; 
+        taud11In  = dustAtt11 * AvOld * dust_to_gas_ratio; 
+        taud11Out = dustAtt11 * Av    * dust_to_gas_ratio; 
+        DtauD   = dustAtt11 * dAv   * dust_to_gas_ratio; 
 #endif 
     
-    // Photons absorbed by H2 and dust, calculate in and out attenuation for both
+        // Photons absorbed by H2 and dust, calculate in and out attenuation for both
+        if(DtauD > 1e-11) { 
+            eAttd11_avg  = 1.0/Dtaud11 * (exp(-taud11In) - exp(-taud11Out));
+            eDAttd11_avg = 1.0/Dtaud11 * (1.0 - exp(-DtauD));
+        } else {
+            eAttd11_avg  = exp(-taud11In)*(1.0 - 0.5*DtauD);
+            eDAttd11_avg = (1.0 - 0.5*DtauD);
+        }
+    
+        normH2Old = H2colmOld/5e14;
+        normH2    = H2colm/5e14;
 
-    if(Dtaud11 > 1e-11) { 
-        eAttd11_avg  = 1.0/Dtaud11 * (exp(-taud11In) - exp(-taud11Out));
-        eDAttd11_avg = 1.0/Dtaud11 * (1.0 - exp(-Dtaud11));
-    } else {
-        eAttd11_avg  = exp(-taud11In)*(1.0 - 0.5*Dtaud11);
-        eDAttd11_avg = (1.0 - 0.5*Dtaud11);
-    }
-    
-    normH2Old = H2colmOld/5e14;
-    normH2    = H2colm/5e14;
-
-    // H2 self shielding at beginning of cell:
-    fshieldIn  = 0.965/pow(1.0+normH2Old,2) + 0.035/sqrt(1.0+normH2Old)*exp(-8.5e-4*sqrt(1.0+normH2Old));
+        // H2 self shielding at beginning of cell:
+        fshieldIn  = 0.965/pow(1.0+normH2Old,2) + 0.035/sqrt(1.0+normH2Old)*exp(-8.5e-4*sqrt(1.0+normH2Old));
     
     
-    if ((H2colm-H2colmOld) > 1e11) {
-      //this formula comes from averaging the shielding function over the H2 column density
-      tmp  = (0.965/(normH2Old +1.0) + fsh_par1 * exp(-8.5e-4*sqrt(1.0 + normH2Old)));
-      tmp2 = (0.965/(normH2    +1.0) + fsh_par1 * exp(-8.5e-4*sqrt(1.0 + normH2)));
-      fshield_avg = 1./(H2colm - H2colmOld) * 5e14*(tmp-tmp2);     
-    } else {
-      fshield_avg = fshieldIn;
-    }
+        if ((H2colm-H2colmOld) > 1e11) {
+        //this formula comes from averaging the shielding function over the H2 column density
+            tmp  = (0.965/(normH2Old +1.0) + fsh_par1 * exp(-8.5e-4*sqrt(1.0 + normH2Old)));
+            tmp2 = (0.965/(normH2    +1.0) + fsh_par1 * exp(-8.5e-4*sqrt(1.0 + normH2)));
+            fshield_avg = 1./(H2colm - H2colmOld) * 5e14*(tmp-tmp2);     
+        } else {
+            fshield_avg = fshieldIn;
+        }
 
    
-    fabs_in = (1.0 + 0.0117 * normH2Old / (1.0 + normH2Old) - exp(-8.5e-4 * (sqrt(normH2Old + 1.0) - 1.0))) / 1.0117;
-    Ndis_in = Ndis * exp(-taud11In) * (1.0 - fabs_in);
+        fabs_in = (1.0 + 0.0117 * normH2Old / (1.0 + normH2Old) - exp(-8.5e-4 * (sqrt(normH2Old + 1.0) - 1.0))) / 1.0117;
+        Ndis_in = Ndis * exp(-taud11In) * (1.0 - fabs_in);
     
-    // H2 ABSORPITON 
-    //
+        // H2 ABSORPITON 
+        //
 
-    // Dissosiation rate of H2
-    kUV = Ndis * eAttd11_avg * fshield_avg*sigmaLW*dr/(volcell*dt);
-    // Number of absorbed photons by H2
-    dNH211 = (1 + fpump)* kUV * xH2*numd*volcell*dt;
+        // Dissosiation rate of H2
+        kUV = Ndis * eAttd11_avg * fshield_avg*sigmaLW*dr/(volcell*dt);
+        // Number of absorbed photons by H2
+        dNH211 = (1 + fpump)* kUV * xH2*numd*volcell*dt;
     
-    // radiation pressure on H2  
-    H2Mom     += dNH211*Edis/clght;  
-    H2abs_est += dNH211;
-    // DUST ABSORPTION
+        // radiation pressure on H2  
+        H2Mom     += dNH211*Edis/clght;  
+        H2abs_est += dNH211;
+        // DUST ABSORPTION
     
-#ifdef useDust 
-    if(Dtaud11 > 1e-11){
-      dNdust11 = fmax(Ndis_in - dNH211,0) * (1.0 - exp(-Dtaud11));
-    } else {
-      dNdust11 = fmax(Ndis_in - dNH211,0) * (Dtaud11-0.5*Dtaud11*Dtaud11);
+        // Assume H2 takes president.. should probably be done at the same time, but thats not very easy
+        if(Dtaud11 > 1e-11){
+            dNdust11 = fmax(Ndis_in - dNH211,0) * (1.0 - exp(-Dtaud11));
+        } else {
+            dNdust11 = fmax(Ndis_in - dNH211,0) * (Dtaud11-0.5*Dtaud11*Dtaud11);
+        }
+
+        DustMom  = DustMom  + dNdust11*Edis/clght; 
+        EtotPe = EtotPe + fmax(Ndis_in-dNH211,0)/dt * eDAttd11_avg * Edis;
+        // Update photons in bin
+        nphots = nphots - dNdust11 - dNH211;
+        if(nphots < 0){
+            nphots = 0;
+        }
+        radData[iE112] = nphots;
+        
     }
-
-    DustEabs = DustEabs + dNdust11*Edis/dt;
-#else
-    // Assume H2 takes president.. should probably be done at the same time, but thats not very easy
-    if(Dtaud11 > 1e-11){
-      dNdust11 = fmax(Ndis_in - dNH211,0) * (1.0 - exp(-Dtaud11));
-    } else {
-      dNdust11 = fmax(Ndis_in - dNH211,0) * (Dtaud11-0.5*Dtaud11*Dtaud11);
-    }
-
-    DustEabs = DustEabs + dNdust11*Edis/dt;
-#endif
-    DustMom  = DustMom  + dNdust11*Edis/clght; 
-    
-    EtotPe = EtotPe * fmax(Ndis_in-dNH211,0)/dt * eDAttd11_avg;
     
     /////////////////////////////////////////////////////
     //
-    //      13.6 - 15.2 eV
+    //      13.6 eV - Emax
     //
-    
-    if(Nion > 0) {
+    for(iEbin = iE136; iEbin < numRadiationBins; iEbin++){
+        nphots = radData[iEbin];
+        if(nphots <= 0){
+            continue;
+        }
+        ephots = radData[iEbin + numRadiationBins];
+        allDone = 0;
         // Calculate optical depths 
-        DtauH  = numdr * sion * xH;
-        DtauH2 = numdr * sigmaLW * xH2;
+        DtauH  = numdr * sionH [iEbin - iE136] * xH;
+        DtauH2 = numdr * sionH2[iEbin - iE136] * xH2;
 #ifdef useDust
-        DtauD  = dustAtt13 * dAv * dust_to_gas_ratio; 
+        DtauD = getDustOpticalDepth(iEbin, dr); 
 #else
-        DtauD  = dustAtt13 * dAv * dust_to_gas_ratio; 
+        DtauD = dustAtt13 * dAv * dust_to_gas_ratio; 
 #endif
         tauTot = DtauH + DtauH2 + DtauD;
-
         if(tauTot == 0.0){
-            goto noTau13;
+            continue;
         }
         norm = 1/tauTot;
 
         // total number of photons that are absorbed
         if(tauTot > 1e-11) {
-            NabsTot = Nion * (1.0-exp(-tauTot));
+            NabsTot = nphots * (1.0-exp(-tauTot));
         }else{
-            NabsTot = Nion * (tauTot-0.5*tauTot*tauTot);
+            NabsTot = nphots * (tauTot-0.5*tauTot*tauTot);
         }
 
         // Atomic hydrogen
-
         DNionH = NabsTot * DtauH * norm;
-        kion = DNionH/(numd * xH * volcell * dt);
+        kion   = DNionH/(numd * xH * volcell * dt);
         phih     += kion;
-        hvphih   += kion*Eion;
-        HMom     += DNionH*(Eion + ionE)/clght;
+        hvphih   += kion*(ephots-ionE);
+        HMom     += DNionH*ephots/clght;
         Habs_est += DNionH; 
-        // Molecular hydrogen
-        DNionH2 = NabsTot * DtauH2 * norm;
-        kUV       += DNionH2/(numd * xH2 * volcell *dt);
-        H2Mom     += DNionH2*(Eion + ionE)/clght;
-        H2abs_est += DNionH2; 
         
-        // Dust
-        DNdust = NabsTot * DtauD * norm;
-        
-#ifdef useDust
-        DustEabs = DustEabs + DNdust*(Eion + ionE)/dt;
-#else
-        DustEabs = DustEabs + DNdust*(Eion + ionE)/dt;
-#endif
-        DustMom += DNdust * DtauD * (Eion + ionE)/clght;
-
-
-        // Remove photons
-        Nion = Nion - NabsTot;
-        if(Nion < 0 ) {
-            Nion = 0;
-        }
-    }
-noTau13:
-    
-    /////////////////////////////////////////////////////
-    //
-    //      15.2 - inf eV
-    //
-    
-    if(NionH2 > 0) {
-        // Calculate optical depths 
-        DtauH  = numdr * sionH  * xH;
-        DtauH2 = numdr * sionH2 * xH2;
-#ifdef useDust
-        DtauD  = dustAtt15 * dAv   * dust_to_gas_ratio; 
-#else
-        DtauD  = dustAtt15 * dAv   * dust_to_gas_ratio; 
-#endif
-        tauTot = DtauH + DtauH2 + DtauD;
-
-        if(tauTot == 0.0){
-            goto noTau15;
-        }
-        norm = 1/tauTot;
-
-        // total number of photons that are absorbed
-        if(tauTot > 1e-11) {
-            NabsTot = NionH2 * (1.0-exp(-tauTot));
-        }else{
-            NabsTot = NionH2 * (tauTot-0.5*tauTot*tauTot);
-        }
-
-        // Atomic hydrogen
-
-        DNionH = NabsTot * DtauH * norm;
-        kion = DNionH/(numd * xH * volcell * dt);
-        phih     += kion;
-        hvphih   += kion*EionH;
-        HMom     += DNionH*(EionH + ionE)/clght;
-        Habs_est += DNionH; 
-
         // Molecular hydrogen
         DNionH2 = NabsTot * DtauH2 * norm;
         kdis      = DNionH2/(numd * xH2 * volcell *dt);
-        phih2     += kdis;
-        hvphih2   += kdis*EionH2;
-        H2Mom     += DNionH2*(EionH2 + ionEH2)/clght;
+        if(iEbin == iE136){
+            kUV += kdis;
+        } else {
+            phih2     += kdis;
+            hvphih2   += kdis*(ephots-ionEH2); 
+        }
+        H2Mom     += DNionH2*ephots/clght;
         H2abs_est += DNionH2; 
         
         // Dust
         DNdust = NabsTot * DtauD * norm;
-        
-#ifdef useDust
-        DustEabs = DustEabs + DNdust*(EionH + ionE)/dt;
-#else
-        DustEabs = DustEabs + DNdust*(EionH + ionE)/dt;
-#endif
-        DustMom += DNdust * (EionH + ionE)/clght;
-        
-        
-        // Remove photons
-        NionH2 = NionH2 - NabsTot;
-        if(NionH2 < 0 ) {
-            NionH2 = 0;
-        }
-    }
-noTau15:
+        DustEabs += DNdust * ephots/dt;
+        DustMom  += DNdust * DtauD * radData[iEbin + numRadiationBins]/clght;
 
+        // Remove photons
+        nphots = nphots - NabsTot;
+        if(nphots < 0 ) {
+            nphots = 0;
+        }
+        radData[iEbin] = nphots;
+    }
 
     // Update arrays
-
     // Number of remaining photons 
-    radData[2] = Nion;     // 13.6 - 15.2 eV
-    radData[3] = NionH2;   // 15.2 - inf  eV
-    
-    // Updated attenuation
-    radData[11] = Hcolm;
-    radData[12] = H2colm;
-    radData[13] = Av;
+    radData[2*numRadiationBins] = Hcolm;
+    radData[2*numRadiationBins + 1] = H2colm;
+    radData[2*numRadiationBins + 2] = Av;
 
     // Rates and energies
     absData[0] = EtotPe;
@@ -453,7 +475,6 @@ noTau15:
     // Estimates of number of absorbed photons
     absData[10] = Habs_est;
     absData[11] = H2abs_est;
-
 }
 
 
