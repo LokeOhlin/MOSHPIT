@@ -64,10 +64,12 @@ int readParameterFile(){
         if(found > 0){
             continue;
         }
+#ifdef useDust
         found = checkDustPars(name, value);
         if(found > 0){
             continue;
         }
+#endif
         found = checkRuntimePars(name, value);
         if(found > 0){
             continue;
@@ -85,8 +87,9 @@ int initSimulation(){
     ierr = setRuntimePars();
     ierr = setIOPars();
     ierr = setChemistryPars();
+#ifdef useDust
     ierr = setDustPars();
-
+#endif
     printf("\treading parameter file\n");
     ierr = readParameterFile();
     if(ierr < 0){
