@@ -50,6 +50,7 @@ int mainLoop(){
         //Hydro
         ierr = doHydroStep(dt);
         if(ierr < 0){
+            printf("error in hydro\n");
             return -1;
         }
 #ifdef useChemistry        
