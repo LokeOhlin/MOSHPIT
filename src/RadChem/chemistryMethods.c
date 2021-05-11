@@ -1,3 +1,4 @@
+#ifdef useChemistry
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,7 @@
 int doChemistryStep(double dt, double *dt_chem){
     int ierr;
     int icell, idx;
-    double radData[14];
+    double radData[2*numRadiationBins + 3];
     double absData[12];
     double abhtot, abctot;
     double specData[5], non_eq_species[3];
@@ -47,14 +48,15 @@ int doChemistryStep(double dt, double *dt_chem){
         etot = ustate[idx+2];
         eint = (etot - 0.5*rho*vel*vel);
         pres = eint*(adi-1);
-        
-        numd = rho/ch_mH/abar;
-        Temp = pres/(numd*ch_kb);
+         
         // Get abundances
-        xH  = ustate[idx+ICHEM_START] * mf_scale;
-        xH2 = ustate[idx+ICHEM_START+1] * mf_scale/2.0;
-        xHp = ustate[idx+ICHEM_START+2] * mf_scale;
+        xH  = (ustate[idx+ICHEM_START]/rho  )* mf_scale;
+        xH2 = (ustate[idx+ICHEM_START+1]/rho) * mf_scale/2.0;
+        xHp = (ustate[idx+ICHEM_START+2]/rho) * mf_scale;
  
+        numd = rho/ch_mH/abar;
+        Temp = pres/(numd*ch_kb(1-xH2+xHp));
+        
         abhtot = 2 * xH2 + xHp + xH;
         if(abhtot != 1.0){
             xH = xH/abhtot;
@@ -62,8 +64,8 @@ int doChemistryStep(double dt, double *dt_chem){
             xHp = xHp/abhtot;
         }
 
-        xCO = ustate[idx+ICHEM_START+3] * mf_scale/ch_muC;
-        xCp = ustate[idx+ICHEM_START+4] * mf_scale/ch_muC;
+        xCO = (ustate[idx+ICHEM_START+3]/rho) * mf_scale/ch_muC;
+        xCp = (ustate[idx+ICHEM_START+4]/rho) * mf_scale/ch_muC;
         abctot = xCO +xCp;
         if(abctot != abundC){
             xCO = xCO * abundC / abctot;
@@ -133,7 +135,6 @@ int doChemistryStep(double dt, double *dt_chem){
         divv     = 0;
         redshift = 0;
         tphoto   = 0;
-
         // TODO  make this interface more general... this might be comiler specific
         evolve_abundances_(&dt, &dr[icell], &numd, &divv, &energy, &redshift, 
                            non_eq_species, &fshield_H2, &fshield_CO, &Av_mean, 
@@ -142,12 +143,6 @@ int doChemistryStep(double dt, double *dt_chem){
     
         sum_abs += NionH0*volcell;
         sum_abs_est += Habs_est; 
-        // Unpack results of chemistry integration
-        ustate[idx+ICHEM_START]   = (1-2*non_eq_species[0]-non_eq_species[1])/mf_scale;
-        ustate[idx+ICHEM_START+1] = non_eq_species[0]*2.0/mf_scale;
-        ustate[idx+ICHEM_START+2] = non_eq_species[1]/mf_scale;
-        ustate[idx+ICHEM_START+3] = non_eq_species[2]/mf_scale;
-        ustate[idx+ICHEM_START+4] = (abundC - non_eq_species[0])/mf_scale;
 
         if(useRadiationPressure > 0){    
             vel = vel + DustMom/(volcell*rho);
@@ -173,9 +168,15 @@ int doChemistryStep(double dt, double *dt_chem){
                 dt_chem[0] = dt_temp;
             }
         } 
+        // Unpack results of chemistry integration
+        ustate[idx+ICHEM_START]   = rho*(1-2*non_eq_species[0]-non_eq_species[1])/mf_scale;
+        ustate[idx+ICHEM_START+1] = rho*non_eq_species[0]*2.0/mf_scale;
+        ustate[idx+ICHEM_START+2] = rho*non_eq_species[1]/mf_scale;
+        ustate[idx+ICHEM_START+3] = rho*non_eq_species[2]/mf_scale;
+        ustate[idx+ICHEM_START+4] = rho*(abundC - non_eq_species[0])/mf_scale;
     }
 
 
     return 1;
 }
-
+#endif

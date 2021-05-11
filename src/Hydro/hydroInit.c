@@ -176,8 +176,11 @@ int init_uniform(){
     getrealhydropar("xCO_init", &xCO_init);
     
     getrealhydropar("rR", &rR);
-    
+#ifdef TESTATOMONLY 
+    dens = numd_init * ch_mH;
+#else
     dens = numd_init * ch_mH * abar;
+#endif
     eint = numd_init*ch_kb*temp_init/(adi-1);
 
     for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
@@ -188,11 +191,11 @@ int init_uniform(){
 #ifdef useChemistry
         xH  = xH_init ;// *(1-rs[icell]/rR);
         xH2 = xH2_init;// *rs[icell]/rR;
-        ustate[idx+ICHEM_START]   = xH/mf_scale;
-        ustate[idx+ICHEM_START+1] = 2*xH2/mf_scale;
-        ustate[idx+ICHEM_START+2] = (1-xH-2*xH2)/mf_scale;
-        ustate[idx+ICHEM_START+3] = xCO_init/mf_scale;
-        ustate[idx+ICHEM_START+4] = (abundC-xCO_init)/mf_scale;
+        ustate[idx+ICHEM_START]   = dens*xH/mf_scale;
+        ustate[idx+ICHEM_START+1] = dens*2*xH2/mf_scale;
+        ustate[idx+ICHEM_START+2] = dens*(1-xH-2*xH2)/mf_scale;
+        ustate[idx+ICHEM_START+3] = dens*xCO_init/mf_scale;
+        ustate[idx+ICHEM_START+4] = dens*(abundC-xCO_init)/mf_scale;
         ustate[idx+ICHEM_END] = 10.0;
 #endif
     }
@@ -232,7 +235,7 @@ int init_leftwave(){
             ustate[icell*nvar +2 ] = r0*(p0/(r0*(adi-1))+0.5*u0*u0);
         }
     }
-    return -1;
+    return 1;
 }
 
 int init_sedov(){
@@ -275,7 +278,7 @@ int init_sedov(){
         ustate[idx+ICHEM_END] = 10.0;
 #endif
     }
-    return -1;
+    return 1;
 }
 
 int init_grid(){

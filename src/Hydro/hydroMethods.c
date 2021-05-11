@@ -140,7 +140,7 @@ int fixState(){
         idx = icell *nvar;
 #ifdef useChemistry
         for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
-            val = fmax(ustate[idx + ivar], 1e-10);
+            val = fmax(ustate[idx + ivar], 1e-10*ustate[idx]);
             ustate[idx + ivar] = val;
         }
 #endif 
@@ -412,7 +412,7 @@ int getFluxes(double *qM, double *qP, double *fluxes){
             fluxes[idx+ivar] = flux[ivar];
         }
     }
-    return -1;
+    return 1;
 }
 
 int doHydroStep(double dt){
@@ -424,28 +424,33 @@ int doHydroStep(double dt){
     double smom;
     ierr = setBoundary();
     if(ierr < 0){
+        printf("Error in setBoundary\n");
         return -1;
     }
     // update the primitive variables 
     ierr = toPrimitive();
     if(ierr < 0){
+        printf("Error in toPrimitive\n");
         return -1;
     }
     if(useHydro > 0) { 
         // calculate TVD Slope
         ierr = getTVDSlopes(dq, dr, dt);
         if(ierr < 0){
+            printf("Error in getTVDslopes\n");
             return -1;
         }
 
         // calculate left and right riemann states
         ierr = getRiemannStates(dq, qP, qM, rs, dr, dt);
         if(ierr < 0){
+            printf("Error in getRiemannStates\n");
             return -1;
         }
         // calculate Fluxes 
         ierr = getFluxes(qM, qP, fluxes);
         if(ierr < 0){
+            printf("Error in getFluxes\n");
             return -1;
         }
 
@@ -459,8 +464,8 @@ int doHydroStep(double dt){
                 rm = rs[icell] - dr[icell]*0.5;
                 rp = rs[icell] + dr[icell]*0.5;
                 
-                surfm = rm*rm;//*dx_sph;
-                surfp = rp*rp;//*dx_sph;
+                surfm = rm*rm;
+                surfp = rp*rp;
                 
                 vol = (rp*rp*rp -rm*rm*rm)/3.;
             } else {
@@ -469,7 +474,9 @@ int doHydroStep(double dt){
 
             for(ivar = 0; ivar<nvar; ivar++){
                 unew = ustate[idx+ivar]+(fluxes[ifn+ivar]*surfm-fluxes[ifp+ivar]*surfp)*dt/vol;
-
+                //if(icell < 10 && ivar < 3){
+                //    printf("%d %d %.4e %.4e \n", icell, ivar, unew, ustate[idx+ivar]);
+                //}
                 if((ivar==0 || ivar==2) && unew<0 ){
                     printf("\nNEGATIVE IVAR = %d\n",ivar);
                     printf("u-1 = %.4e, u=%.4e , u+1=%.4e \n",ustate[(icell-1)*nvar+ivar], ustate[(icell)*nvar+ivar], ustate[(icell+1)*nvar+ivar]);
