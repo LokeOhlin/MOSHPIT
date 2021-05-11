@@ -1,5 +1,6 @@
 CCOMP = gcc
-CFLAGS = -DuseChemistry -DuseDust -fbounds-check -O -DNdustBins=256
+#CFLAGS = -DuseChemistry -DuseDust -fbounds-check -O -DNdustBins=256
+CFLAGS =  -fbounds-check -O 
 CFLAGS += -O3
 LIBS = -lm -lgfortran -lquadmath -lstdc++
 CDEPS =
@@ -12,6 +13,15 @@ OBJ  =
 PATHS = 
 
 FLAGS = -g
+
+
+FLAGS = 
+#FLAGS += -DuseDust -DNdustBins=256
+FLAGS += -DTESTATOMONLY
+FLAGS += -DuseChemistry
+
+CFLAGS += $(FLAGS)
+FFLAGS += $(FLAGS)
 
 VPATH = ../Main:../Init:../c_general/:../IO:../Hydro:../RadChem:../RadChem/Chemistry:../RadChem/Dust:../Runtime
 # Code stuff
