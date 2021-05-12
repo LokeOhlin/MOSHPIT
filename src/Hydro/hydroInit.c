@@ -13,7 +13,7 @@
 
 int nrealHydroPars = 15;
 real_list_t *hydroDPars = NULL;
-int nintHydroPars = 7;
+int nintHydroPars = 8;
 int_list_t *hydroIPars = NULL;
 
 
@@ -85,8 +85,9 @@ int setHydroPars(){
     strcpy(hydroIPars[2].name, "geometry");    hydroIPars[2].value = 1;
     strcpy(hydroIPars[3].name, "left_bound");  hydroIPars[3].value = 0;
     strcpy(hydroIPars[4].name, "right_bound"); hydroIPars[4].value = 1;
-    strcpy(hydroIPars[5].name, "setup");       hydroIPars[5].value = 0;
-    strcpy(hydroIPars[6].name, "useHydro");    hydroIPars[6].value = 1;
+    strcpy(hydroIPars[5].name, "logspace_cells");       hydroIPars[5].value = 0;
+    strcpy(hydroIPars[6].name, "setup");       hydroIPars[6].value = 0;
+    strcpy(hydroIPars[7].name, "useHydro");    hydroIPars[7].value = 1;
    
     return 1;
 }
@@ -282,25 +283,72 @@ int init_sedov(){
 }
 
 int init_grid(){
-    int icell;
-    double rL, rR, L, dr_const, rp, rm;
+    int icell, logspace;
+    double rL, rR, L, dr_const, rp, rm, orth_extent;
     getintegerhydropar("geometry", &geometry);
+    getintegerhydropar("logspace_cells", &logspace);
     getrealhydropar("rL", &rL);
     getrealhydropar("rR", &rR);
-    L = rR -rL;
-    dr_const = L/(NCELLS - 2*NGHOST);
-    
-    for(icell = 0; icell < NCELLS; icell++){
-        rs[icell]  = dr_const*(icell - NGHOST +1./2.);
-
-        rp = rs[icell] + 0.5*dr_const;
-        rm = rs[icell] - 0.5*dr_const;
+    getrealhydropar("orth_extent", &orth_extent);
+    if(logspace == 0){
+        L = rR -rL;
         
-        dr[icell]  = dr_const;
-        if(geometry == 1){
-            vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
-        } else {
-            vol[icell] = dr_const*dr_const*dr_const;
+        dr_const = L/(NCELLS - 2*NGHOST);
+        // by default, assume cubical cells
+        if(orth_extent < 0){
+            orth_extent = dr_const;
+        }
+
+        for(icell = 0; icell < NCELLS; icell++){
+            rs[icell]  = dr_const*(icell - NGHOST +1./2.);
+
+            rp = rs[icell] + 0.5*dr_const;
+            rm = rs[icell] - 0.5*dr_const;
+            
+            dr[icell]  = dr_const;
+            if(geometry == 1){
+                vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
+            } else {
+                vol[icell] = dr_const*orth_extent*orth_extent;
+            }
+        }
+    } else {
+        // logspace. Distribute cell centers, with the caveat that the max and
+        //  min cells will have their edges outside the bounds
+
+        if(rL <= 0){
+            printf("Left edge must be > 0 for logspace distributed cells \n");
+            return -1;
+        }
+        dr_const = exp((log(rR) - log(rL))/(NCELLS - 2 * NGHOST));
+        // distribute cell centers
+        for(icell = NGHOST; icell < NCELLS; icell++){
+            rs[icell] = rL*pow(dr_const, (icell - NGHOST));
+        }
+        // set lower ghost cells, reflect around 0
+        for(icell = 0; icell < NGHOST; icell ++){
+            rs[icell] = - rs[2*NGHOST - icell - 1]; 
+        }
+
+        // Calculate cell sizes and volumes
+        // If we are using 1D cartesian, then we need to make sure that
+        // the surface between cells are identical
+        
+        // by default, assume cells have the size in the orhogonal direction
+        // same as for the first cell
+        if(orth_extent < 0){
+            orth_extent = dr[NGHOST];
+        }
+        
+        for(icell = 1; icell < NCELLS - 1; icell++){
+            rp = (rs[icell+1] + rs[icell])*0.5;
+            rm = (rs[icell-1] + rs[icell])*0.5;
+            dr[icell]  = rp - rm;
+            if(geometry == 1){
+                vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
+            } else {
+                vol[icell] = dr_const*orth_extent*orth_extent;
+            }
         }
     }
    return 1; 
