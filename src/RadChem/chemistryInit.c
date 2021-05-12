@@ -13,7 +13,7 @@
 
 int nrealPars = 26;
 real_list_t *chemDPars = NULL;
-int nintPars = 13;
+int nintPars = 14;
 int_list_t *chemIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
@@ -76,6 +76,7 @@ int setChemistryPars(){
     strcpy(chemIPars[10].name, "radiationPressure");      chemIPars[10].value =  1;
     strcpy(chemIPars[11].name, "numBinsSubIon");       chemIPars[11].value = 30;
     strcpy(chemIPars[12].name, "numBinsFullIon");      chemIPars[12].value = 10;
+    strcpy(chemIPars[13].name, "readSEDFromFile");      chemIPars[13].value = 0;
     return 1;
 }
 

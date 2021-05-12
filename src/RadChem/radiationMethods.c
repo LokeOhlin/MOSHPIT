@@ -20,6 +20,8 @@ double ionEH2 = 2.43530838e-11;
 double dissE  = 1.79443775e-11;
 double heatE  = 9.02930155e-12;
 
+double sigma0   = 6.30e-18;
+double sigmaH0  = 4.5125966e-18;
 
 double dustAtt5  = 2.5;
 double dustAtt11 = 4.0;
@@ -31,37 +33,21 @@ double Temp_lim = 1e3;
 double fsh_par1 = 82.3529411765;
 double fpump = 6.94;
 
-double Npeh0 = 0;
-double Ndis0 = 0;
-double Nion0 = 0;
-double NionH20 = 0;
 
 double *EbinEdges;
 double *aveEphots;
 double *Nphots;
 
-double Edis;
-double Eion;
 double *EionH;
 double *EionH2;
 
 double sigmaLW = 2.46e-18;
-double sion;
 double *sionH;
 double *sionH2;
 
 void initRadiation(){
-    int iEbin;
+    int iEbin, readSEDFromFile;
     double delE;
-    double Teff;
-    double Lstar; 
-    double RstarSQ;
-    double inf = -1.0;
-    double sigma0   = 6.30e-18;
-    double sigma0H  = 4.5125966e-18;
-    double boltzy = 5.6704e-5;
-    double Lsun   = 3.838e+33;
-    double tmp = 1.0, tmp2;
     
     getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
     getrealchemistrypar("ch_AV_conversion_factor", &AV_conversion_factor);
@@ -75,6 +61,7 @@ void initRadiation(){
     getrealchemistrypar("radEmin", &radEmin);
     getrealchemistrypar("radEmax", &radEmax);
 
+    getintegerchemistrypar("readSEDFromFile", &readSEDFromFile);
     
     numRadiationBins = numBinsSubIon + numBinsFullIon + 2;
     iE112 = numBinsSubIon;
@@ -110,87 +97,13 @@ void initRadiation(){
     sionH  = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
     sionH2 = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
     
-
-    
-
-    getrealchemistrypar("Tstar", &Teff);
-    getrealchemistrypar("Lstar", &Lstar);
-
-    RstarSQ = Lstar * Lsun/(4*M_PI*Teff*Teff*Teff*Teff*boltzy);
-
-    // treat the special bins
-    // 13.6 to 15.2
-#ifdef TESTATOMONLY
-// TESTATOM: only atomic, set all bins to zero, except one which contains all p>13.6 photons
-    Nphots[iE136]    = 1e49;
-    aveEphots[iE136] = 2.49912e-11;
-    sionH[0]     = 6.3e-18;
-    EionH[0]     = 3.204e-12;
-    sionH2[0]    = 0;
-    EionH2[0]    = 0;
-#else
-    getsourceemission_(&Teff, &ionE, &ionEH2, &sigma0, &Eion, &Nion0, &sion);
-    Nion0 = Nion0*4.0*M_PI*RstarSQ;
-    sion  = sion*4.0*M_PI*RstarSQ/Nion0;
-
-    Nphots[iE136]    = Nion0; 
-    aveEphots[iE136] = Eion;
-    sionH [0] = sion;
-    sionH2[0] = sigmaLW;
-    
-    Eion  = Eion - ionE;
-    EionH [0] = Eion;
-    EionH2[0] = Eion;
-#endif
-
-    //11.2 - 13.6
-#ifdef TESTATOMONLY
-    Nphots[iE112]    = 0;
-    aveEphots[iE112] = 0;
-#else
-    getemissionsigma_(&Teff, &dissE, &ionE, &tmp, &Edis, &Ndis0);
-    Ndis0 = Ndis0*4.0*M_PI*RstarSQ;
-
-    Nphots[iE112]    = Ndis0;
-    aveEphots[iE112] = Edis; 
-#endif
-
-    // 15.2 to Emax
-    for(iEbin = 0; iEbin < numBinsFullIon; iEbin++){
-#ifdef TESTATOMONLY
-        Nphots[iEbin + iE152] = 0;
-        aveEphots[iEbin + iE152] = EbinEdges[iEbin + iE152];
-        sionH[iEbin + 1]  = 0;
-        EionH[iEbin + 1]  = 0;
-        sionH2[iEbin + 1] = 0;
-        EionH2[iEbin + 1] = 0;
-#else
-        getsourceemission_(&Teff, &EbinEdges[iEbin + iE152], &EbinEdges[iEbin + 1 + iE152], &sigma0H, &Eion, &NionH20, &sion);
-        NionH20 = NionH20*4.0*M_PI*RstarSQ;
-        Nphots[iEbin + iE152] = NionH20;
-        sionH[iEbin + 1] = sion*4.0*M_PI*RstarSQ/NionH20;
-        aveEphots[iEbin + iE152] = Eion; 
-        EionH[iEbin + 1] = Eion - ionE;
-
-
-        directh2_(&Teff, &EbinEdges[iEbin + iE152], &EbinEdges[iEbin + 1 + iE152], &Eion, &sion);
-        sionH2[iEbin+1] = sion*4.0*M_PI*RstarSQ/NionH20;
-        EionH2[iEbin+1] = Eion - ionEH2;
-#endif
-    } 
-
-    //5.6 -11.2
-    for(iEbin = 0; iEbin < numBinsSubIon; iEbin++){
-#ifdef TESTATOMONLY
-        Nphots[iEbin] = 0;
-        aveEphots[iEbin] = EbinEdges[iEbin];
-#else
-        getemissionsigma_(&Teff, &EbinEdges[iEbin], &EbinEdges[iEbin+1], &tmp, &Edis, &Npeh0);
-        Nphots[iEbin] = Npeh0*4.0*M_PI*RstarSQ;
-        aveEphots[iEbin] = Edis;
-#endif
-    }
+    if(readSEDFromFile){
+        setFromFile();
+    } else {
+        setFromStellarModel();
+    }    
 }
+
 void setRadiationData(double *radData, double dt){
         // set intial package data
         // Number of photons 
