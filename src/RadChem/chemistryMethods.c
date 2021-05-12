@@ -55,7 +55,7 @@ int doChemistryStep(double dt, double *dt_chem){
         xHp = (ustate[idx+ICHEM_START+2]/rho) * mf_scale;
  
         numd = rho/ch_mH/abar;
-        Temp = pres/(numd*ch_kb(1-xH2+xHp));
+        Temp = pres/(numd*ch_kb*(1-xH2+xHp));
         
         abhtot = 2 * xH2 + xHp + xH;
         if(abhtot != 1.0){
