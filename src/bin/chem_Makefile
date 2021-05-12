@@ -1,0 +1,82 @@
+CCOMP = gcc
+#CFLAGS = -DuseChemistry -DuseDust -fbounds-check -O -DNdustBins=256
+CFLAGS =  -fbounds-check -O 
+CFLAGS += -O3
+LIBS = -lm -lgfortran -lquadmath -lstdc++
+CDEPS =
+
+FCOMP = gfortran
+#FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 -DDEBUG_EVOLVE
+FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 -std=legacy 
+FDEPS =
+OBJ  = 
+PATHS = 
+
+FLAGS = -g
+
+
+FLAGS = 
+#FLAGS += -DuseDust -DNdustBins=256
+#FLAGS += -DTESTATOMONLY
+FLAGS += -DuseChemistry
+
+CFLAGS += $(FLAGS)
+FFLAGS += $(FLAGS)
+
+VPATH = ../Main:../Init:../c_general/:../IO:../Hydro:../RadChem:../RadChem/Chemistry:../RadChem/Dust:../Runtime
+# Code stuff
+
+# Each directory determines what object it thinks it needs
+CGENOBJ = 
+include ../c_general/Makefile
+CDEPS += -I../c_general/
+
+HYDROBJ = 
+include ../Hydro/Makefile
+CDEPS += -I../Hydro/
+
+CHEMOBJ = 
+include ../RadChem/Chemistry/Makefile
+FDEPS += -I../RadChem/Chemistry/
+include ../RadChem/Makefile
+CDEPS += -I../RadChem/
+include ../RadChem/Dust/Makefile
+CDEPS += -I../RadChem/Dust/
+
+IOOBJ   = 
+include ../IO/Makefile
+CDEPS += -I../IO/
+
+INITOBJ   = 
+include ../Init/Makefile
+CDEPS += -I../Init/
+
+RTOBJ   = 
+include ../Runtime/Makefile
+CDEPS += -I../Runtime/
+
+MAINOBJ = 
+include ../Main/Makefile
+CDEPS += -I../Main/
+
+# Gather modules
+OBJ += $(CHEMOBJ)
+OBJ += $(CGENOBJ)
+OBJ += $(MAINOBJ)
+OBJ += $(HYDROBJ)
+OBJ += $(IOOBJ)
+OBJ += $(RTOBJ)
+OBJ += $(INITOBJ)
+CFLAGS += $(CDEPS)
+FFLAGS += $(FDEPS)
+.SUFFIXES: .c .F90 .F .o 
+%.o: %.F
+	$(FCOMP) -c -o $@ $< $(FLAGS) $(FFLAGS)
+%.o: %.F90
+	$(FCOMP) -c -o $@ $< $(FLAGS) $(FFLAGS)
+%.o: %.c
+	$(CCOMP) -c -o $@ $< $(FLAGS) $(CFLAGS)
+moshpit: $(OBJ)
+	$(CCOMP) -o $@ $^ $(FLAGS) $(CFLAGS) $(LIBS) $(FFLAGS)
+clean :
+	rm -f $(OBJPATH)*.o
