@@ -1,6 +1,6 @@
 #ifndef INIT
 #define INIT
-#include "init.h"
+#include <init.h>
 
 int initSimulation();
 #endif

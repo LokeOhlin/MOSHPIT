@@ -4,19 +4,19 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "hydro.h"
-#include "radchem.h"
-#include "cgeneral.h"
-#include "dust.h"
+#include <hydro.h>
+#include <radchem.h>
+#include <cgeneral.h>
+#include <dust.h>
+#include <dustRadiation.h>
+#include <constantsAndUnits.h>
 #ifdef useDust
-int nrealDustPars = 12;
+int nrealDustPars = 13;
 real_list_t *dustDPars = NULL;
-int nintDustPars = 5;
+int nintDustPars = 9;
 int_list_t *dustIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
-
-
 
 double amin, amax;
 double *abin_e = NULL;
@@ -29,6 +29,10 @@ double *SfactA = NULL;
 // Factors in front of N and S after integrating over bin to get mass
 double *NfactM = NULL;
 double *SfactM = NULL;
+
+// Geometric quantities 
+double *pi_asquare = NULL;
+double *volgrains  = NULL;
 
 double fSi;
 
@@ -44,7 +48,14 @@ int dadt_mode; // 0 standard based on physical processes
                // 3 rate oscillating with time
 double dadt_c;
 double dadt_tscale;
+double dadt_min;
 
+// whether the lower/upper bounds of the distribution are to be pile up (eg. gathered) or outflow when rebinned
+int dust_lowerBound_pileUp;
+int dust_upperBound_pileUp;
+
+// Number of atoms in a grain 
+double *Natoms = NULL;
 // scratch arrays for calculations in each cell
 double *dadt   = NULL;
 double *number = NULL;
@@ -54,12 +65,30 @@ double *Mnew = NULL;
 double *Nnew = NULL;
 double *Snew = NULL;
 
-// SET TO PROPER VALUES
-double rho_s = 3.0;
-double rho_c = 3.0;
+// density and average atom mass of silicates 
+double rho_s = 3.5;
+double aveMatom_s = 3.3665848928571423e-23; //(~20 mH)
+// density and average atom mass of graphites
+double rho_c = 2.26;
+double aveMatom_c = 2.0118425e-23; //(~12 mH)
 
 // timestep limiter
 double dadt_lim;
+
+// Maximum number of substeps taken in integration of dust sizes
+int dust_maxSubSteps;
+
+// saved indexes in tables
+int *ida_tabQabs = NULL;
+int *ida_tabQem  = NULL;
+int *ida_tabSput = NULL;
+
+// options for physical processes
+int dust_useRadiation, dust_useSublimation, dust_useSputtering;
+
+//flag for writing dust output
+int outputDust;
+int outputNum = 0;
 
 // set default parameter lists 
 int setDustPars(){
@@ -81,15 +110,22 @@ int setDustPars(){
     strcpy(dustDPars[8].name, "dust_smax");  dustDPars[8].value = 1e-4;
     strcpy(dustDPars[9].name, "dust_plaw");  dustDPars[9].value = -3.5;
 
-    strcpy(dustDPars[10].name, "dust_dadt_c");  dustDPars[10].value = 1e-13;
+    strcpy(dustDPars[10].name, "dust_dadt_c");  dustDPars[10].value = 0.0;
     strcpy(dustDPars[11].name, "dust_dadt_tscale");  dustDPars[11].value = 0.0;
+    
+    strcpy(dustDPars[12].name, "dust_dadt_min");  dustDPars[12].value = 3.17e-17;
+    
     
     // Integer parameters
     strcpy(dustIPars[0].name, "dust_initDist"); dustIPars[0].value = 0;
     strcpy(dustIPars[1].name, "dust_dadt_mode"); dustIPars[1].value = 0;
-    strcpy(dustIPars[2].name, "dust_useRadiation"); dustIPars[2].value = 0;
-    strcpy(dustIPars[3].name, "dust_useSublimation"); dustIPars[3].value = 0;
-    strcpy(dustIPars[4].name, "dust_nTempBins"); dustIPars[4].value = 200;
+    strcpy(dustIPars[2].name, "dust_useRadiation"); dustIPars[2].value = 1;
+    strcpy(dustIPars[3].name, "dust_useSublimation"); dustIPars[3].value = 1;
+    strcpy(dustIPars[4].name, "dust_useSputtering"); dustIPars[4].value = 1;
+    strcpy(dustIPars[5].name, "dust_NtempBins"); dustIPars[5].value = 200;
+    strcpy(dustIPars[6].name, "dust_maxSubSteps"); dustIPars[6].value = 1000;
+    strcpy(dustIPars[7].name, "dust_lowerBound_pileUp"); dustIPars[7].value = 0;
+    strcpy(dustIPars[8].name, "dust_upperBound_pileUp"); dustIPars[8].value = 1;
     return 1;
 }
 
@@ -259,8 +295,8 @@ int initDustPowerLaw(){
 
 
 int initDust(){
-    int ierr, ibin, idx;
-    double amin, amax, da;
+    int ierr, ibin, iabin, idx, graphite, NtempBins;
+    double amin, amax, da, norm;
     double ae, aep, ac;
     // Number of dust size bins per species
     getrealdustpar("dust_amin", &amin);
@@ -293,8 +329,10 @@ int initDust(){
     Nabins = Nabins + 2*dust_nghost;
 
     // allocate arrays
-    abin_c = (double *) malloc(Nabins*sizeof(double));
-    abin_e = (double *) malloc((Nabins+1)*sizeof(double));
+    abin_c     = (double *) malloc(Nabins*sizeof(double));
+    pi_asquare = (double *) malloc(Nabins*sizeof(double));
+    volgrains  = (double *) malloc(Nabins*sizeof(double));
+    abin_e     = (double *) malloc((Nabins+1)*sizeof(double));
 
     NfactA  = (double *) malloc(Nabins*sizeof(double));
     NfactM  = (double *) malloc(Nabins*sizeof(double));
@@ -309,6 +347,8 @@ int initDust(){
     // Calculate cell centers (linear)
     for(ibin = 0; ibin < Nabins; ibin ++){
         abin_c[ibin] = (abin_e[ibin]+abin_e[ibin+1])/2.;
+        pi_asquare[ibin] = M_PI*pow(abin_c[ibin], 2.0);
+        volgrains [ibin] = 4*M_PI*pow(abin_c[ibin], 3.0)/3.0;
     }
 
     // pre calculate factors
@@ -333,6 +373,7 @@ int initDust(){
         dust_nbins = NdustBins + 2*dust_nghost;
     }
 
+    Natoms = (double *) malloc(dust_nbins*sizeof(double));  
     dadt   = (double *) malloc(dust_nbins*sizeof(double));  
     number = (double *) malloc(dust_nbins*sizeof(double)); 
     slope  = (double *) malloc(dust_nbins*sizeof(double)); 
@@ -346,6 +387,17 @@ int initDust(){
         isilicone = Nabins;
     } else {
         isilicone = 0;
+    }
+
+    for(ibin = 0; ibin < dust_nbins; ibin++){
+        if(ibin < isilicone){
+            norm = rho_c/aveMatom_c;
+            iabin = ibin;
+        } else {
+            norm = rho_s/aveMatom_s;
+            iabin = ibin - isilicone;
+        }
+        Natoms[ibin] = volgrains[iabin] * norm;
     }
 
     // Set initial distribution
@@ -362,28 +414,59 @@ int initDust(){
 
     // timestep limiters
     getrealdustpar("dust_dadt_lim", &dadt_lim);
+    getintegerdustpar("dust_maxSubSteps", &dust_maxSubSteps);
+    getintegerdustpar("dust_lowerBound_pileUp", &dust_lowerBound_pileUp);
+    getintegerdustpar("dust_upperBound_pileUp", &dust_upperBound_pileUp);
     
-    
-    if(useRadiation){
+    getintegerdustpar("dust_useRadiation", &dust_useRadiation);
+    getintegerdustpar("dust_useSublimation", &dust_useSublimation);
+    getintegerdustpar("dust_useSputtering", &dust_useSublimation);
+    if(dust_useRadiation){
+        
         // allocate  
+        ierr = loadDustRadiationTables();
         ida_tabQabs  = (int *) malloc(dust_nbins*sizeof(int));
-        ida_tabQem  = (int *) malloc(dust_nbins*sizeof(int));
+        ida_tabQem   = (int *) malloc(dust_nbins*sizeof(int));
+        for(ibin = 0; ibin < dust_nbins; ibin++){
+            ida_tabQabs[ibin] = 0;
+            ida_tabQem[ibin]  = 0;
+        }
         for(idx = 0; idx < NdustBins; idx++){
             ibin = globalToLocalIndex(idx);
             if(ibin < isilicone){
                 graphite = 1;
+                iabin = ibin;
             } else {
                 graphite = 0;
+                iabin = ibin - isilicone;
             }
-            ida_tabQabs[ibin] = getQabs_ida(abin_c[ibin], graphite);
-            ida_tabQem[ibin]  = getQemAve_ida(abin_c[ibin], graphite);
+            ida_tabQabs[ibin] = getQabs_ida(abin_c[iabin], graphite);
+            ida_tabQem[ibin]  = getQemAve_ida(abin_c[iabin], graphite);
         }
 
-        if(useSublimation){
+        if(dust_useSublimation){
+            getrealdustpar("dust_dadt_min", &dadt_min);
+            getintegerdustpar("dust_NtempBins", &NtempBins);
+            initTemperatureDist(NtempBins);
         }
     }
     
-    
+    if(dust_useSputtering){
+        ierr = loadDustSputteringTables();
+        ida_tabSput   = (int *) malloc(dust_nbins*sizeof(int));
+        for(idx = 0; idx < NdustBins; idx++){
+            ibin = globalToLocalIndex(idx);
+            if(ibin < isilicone){
+                graphite = 1;
+                iabin = ibin;
+            } else {
+                graphite = 0;
+                iabin = ibin - isilicone;
+            }
+            ida_tabSput[ibin] = getSputYield_ida(abin_c[iabin], graphite); 
+        }
+    }
+
     return 1;
 }
 

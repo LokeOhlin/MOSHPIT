@@ -5,8 +5,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 //#include "hydro.h"
-#include "radchem.h"
-
+#include <radchem.h>
+#include <constantsAndUnits.h>
+#ifdef useDust
+#include <dust.h>
+#include <dustRadiation.h>
+#endif
 int useRadiationPressure;
 double radEmin, radEmax;
 int numBinsSubIon;
@@ -14,7 +18,7 @@ int numBinsFullIon;
 int numRadiationBins;
 int iE112, iE136, iE152;
 
-double clght  = 29979245800.0;
+//double clght  = 29979245800.0;
 double ionE   = 2.17863955e-11;
 double ionEH2 = 2.43530838e-11;
 double dissE  = 1.79443775e-11;
@@ -46,7 +50,7 @@ double *sionH;
 double *sionH2;
 
 void initRadiation(){
-    int iEbin, readSEDFromFile;
+    int iEbin, readSEDFromFile, ierr;
     double delE;
     
     getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
@@ -96,7 +100,11 @@ void initRadiation(){
     EionH2 = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
     sionH  = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
     sionH2 = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
-    
+#ifdef useDust
+    // init local dust arrays for radiation SED and dust absorption
+        ierr = initDustRadiation(numRadiationBins, EbinEdges);
+#endif 
+
     if(readSEDFromFile){
         setFromFile();
     } else {
@@ -127,7 +135,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     // Column densities
     double Hcolm, HcolmOld, H2colm, H2colmOld, Av, AvOld, dAv, normH2, normH2Old;
     // Optical depths
-    double taud11In, taud11Out, Dtaud11, DtauH, DtauH2, DtauD, tauTot;
+    double taud11In, taud11Out, DtauH, DtauH2, DtauD, tauTot;
     // Attenuation from dust and shielding from H2 in 5.2-13.6 bins
     double eAttavg, eAttd11_avg, eDAttd11_avg, fshieldIn, fshield_avg, fabs_in, Ndis_in, dNH211, dNdust11;
     double DNionH, DNionH2, DNdust, NabsTot, dNdust;
@@ -146,6 +154,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     H2abs_est = 0;
     Habs_est  = 0;
 
+    kUV       = 0;
     phih      = 0;
     phih2     = 0;
     hvphih    = 0;
@@ -166,7 +175,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     H2colm = H2colmOld + numdr*xH2;
 
 #ifndef useDust
-    dAv = AV_conversion_factor*numdr*(2.0*xH2+xH2+xHp);//*exp(-Temp/Temp_lim);
+    dAv = AV_conversion_factor*numdr*(2.0*xH2+xH+xHp);//*exp(-Temp/Temp_lim);
     Av = AvOld + dAv;
 #endif
 
@@ -193,7 +202,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         } else {
             dNdust = nphots * ( DtauD - 0.5 * DtauD * DtauD);
         }
-        DustEabs = DustEabs + dNdust * ephots;
+        DustEabs = DustEabs + dNdust * ephots/dt;
         DustMom  = DustMom  + dNdust * ephots/clght;
         if(DtauD > 1e-11) { 
             eAttavg = 1.0/DtauD * ( 1 - exp(-DtauD));
@@ -211,7 +220,6 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         }
         radData[iEbin] = nphots;
     }
-        
     /////////////////////////////////////////////////////
     //
     //      11.2 - 13.6 eV
@@ -231,24 +239,24 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
 #ifdef useDust
         // Calculate the total optical depth from dust of these photons and how much they absorb
         taud11In  = AvOld; 
-        DtauD = getDustOpticalDepth(iE112, dr)
+        DtauD = getDustOpticalDepth(iE112, dr);
         taud11Out = AvOld + DtauD; 
         Av = taud11Out;
 #else
         taud11In  = dustAtt11 * AvOld * dust_to_gas_ratio; 
         taud11Out = dustAtt11 * Av    * dust_to_gas_ratio; 
-        DtauD   = dustAtt11 * dAv   * dust_to_gas_ratio; 
+        DtauD     = dustAtt11 * dAv   * dust_to_gas_ratio; 
 #endif 
     
         // Photons absorbed by H2 and dust, calculate in and out attenuation for both
         if(DtauD > 1e-11) { 
-            eAttd11_avg  = 1.0/Dtaud11 * (exp(-taud11In) - exp(-taud11Out));
-            eDAttd11_avg = 1.0/Dtaud11 * (1.0 - exp(-DtauD));
+            eAttd11_avg  = 1.0/DtauD * (exp(-taud11In) - exp(-taud11Out));
+            eDAttd11_avg = 1.0/DtauD * (1.0 - exp(-DtauD));
         } else {
             eAttd11_avg  = exp(-taud11In)*(1.0 - 0.5*DtauD);
             eDAttd11_avg = (1.0 - 0.5*DtauD);
         }
-    
+
         normH2Old = H2colmOld/5e14;
         normH2    = H2colm/5e14;
 
@@ -267,13 +275,13 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
 
    
         fabs_in = (1.0 + 0.0117 * normH2Old / (1.0 + normH2Old) - exp(-8.5e-4 * (sqrt(normH2Old + 1.0) - 1.0))) / 1.0117;
-        Ndis_in = Ndis * exp(-taud11In) * (1.0 - fabs_in);
-    
+        Ndis_in = Ndis * exp(-taud11In) * (1.0 - fabs_in)*dt;
         // H2 ABSORPITON 
         //
 
         // Dissosiation rate of H2
-        kUV = Ndis * eAttd11_avg * fshield_avg*sigmaLW*dr/(volcell*dt);
+        kUV = Ndis * eAttd11_avg * fshield_avg*sigmaLW*dr/volcell;
+        //printf("%.4e %4e %.4e %.4e %.4e %.4e\n", Ndis, fshield_avg, eAttd11_avg, sigmaLW, dr/volcell, kUV);
         // Number of absorbed photons by H2
         dNH211 = (1 + fpump)* kUV * xH2*numd*volcell*dt;
     
@@ -283,13 +291,14 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         // DUST ABSORPTION
     
         // Assume H2 takes president.. should probably be done at the same time, but thats not very easy
-        if(Dtaud11 > 1e-11){
-            dNdust11 = fmax(Ndis_in - dNH211,0) * (1.0 - exp(-Dtaud11));
+        if(DtauD > 1e-11){
+            dNdust11 = fmax(Ndis_in - dNH211,0) * (1.0 - exp(-DtauD));
         } else {
-            dNdust11 = fmax(Ndis_in - dNH211,0) * (Dtaud11-0.5*Dtaud11*Dtaud11);
+            dNdust11 = fmax(Ndis_in - dNH211,0) * (DtauD-0.5*DtauD*DtauD);
         }
 
-        DustMom  = DustMom  + dNdust11*Edis/clght; 
+        DustEabs  = DustEabs  + dNdust11*Edis/dt; 
+        DustMom   = DustMom   + dNdust11*Edis/clght; 
         EtotPe = EtotPe + fmax(Ndis_in-dNH211,0)/dt * eDAttd11_avg * Edis;
         // Update photons in bin
         nphots = nphots - dNdust11 - dNH211;

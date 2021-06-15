@@ -4,8 +4,8 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "IO.h"
-#include "cgeneral.h"
+#include <IO.h>
+#include <cgeneral.h>
 
 int nrealIOPars = 0;
 real_list_t *IODPars = NULL;

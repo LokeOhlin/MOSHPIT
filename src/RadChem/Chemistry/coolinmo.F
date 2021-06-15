@@ -669,7 +669,11 @@ c Final exponential term added to avoid numerical problems at very high T
 
          gg              = 1e0 - 0.8 * exp(-75e0 * tinv)
 c
+#ifdef limitDust
          cltab(14,itemp) = 3.8e-33 * tsqrt * gg * exp(-temp / 3e4)
+#else
+         cltab(14,itemp) = 3.8e-33 * tsqrt * gg 
+#endif 
 c
 c (cl15) --  OH cooling - non-lte
 c like water cooling: HM79 universal cooling law

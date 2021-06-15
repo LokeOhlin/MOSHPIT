@@ -4,10 +4,10 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "dust.h"
-#include "hydro.h"
-#include "radchem.h"
-#include "moshpit.h"
+#include <dust.h>
+#include <hydro.h>
+#include <radchem.h>
+#include <moshpit.h>
 
 #ifdef useDust
 /////////////////////////////////////////
@@ -46,78 +46,11 @@ int localToGlobalIndex(int ibin){
     return idx;
 }
 
-
-
-
-//////////////////////////////////////////
-//
-//  Methods to calculate dust absorption and optical depth
-//
-//////////////////////////////////////////
-
-int getDustOpticalDepth(){
-    return 1;
-}
-
-
 //////////////////////////////////////////
 //
 //  Methods for evolution of dust distribution
 //
 //////////////////////////////////////////
-
-
-
-//  Gas accretion and sputtering
-//  sputtering : Tsai & Mathews 1995
-double dadt_gas(double *pars){
-//    double gas_density     = pars[0];
-//    double H_density       = pars[1];
-//    double gas_temperature = pars[2];
-//    double Tsput           = pars[3];
-//
-//    double dadt = 0;
-//
-//    // Growth from accretion. 
-//    dadt += (H_density/(1e-3))*sqrt(gas_temperature/10)*1e-4/(1e9*years); //micrometer per Gyr
-//    // Destruction from sputtering
-//    dadt -= (3.2e-18)*(gas_density/mass_p)/(pow(Tsput/gas_temperature,2.5)+1);
-    return 0.;
-}
-// Sublimation rate from GUHATHAKURTA AND DRAINE 1989
-// Assumes of the form
-//  
-//  dm/dt = -4*pi*a^2*m_part*prefact * exp (-(B-2e4*N^(-1/3)/kT_dust)
-//  da/dt = -(m_part/rho)*prefact* exp
-double dadt_sublimation(double ai, double temp_i, int graphite){
-//    double Ni, prefact, B;
-//    if(graphite == 1){
-//        prefact = 2e14*m_carbon/rho_c;
-//        Ni      = rho_c*4*M_PI*pow(ai,3)/3/m_carbon;
-//        B       = 81200-20000*pow(Ni,-1./3.);
-//    } else {
-//        prefact = 2e15*m_silicate/rho_s;
-//        Ni      = rho_s*4*M_PI*pow(ai,3)/3/m_silicon;
-//        B       = 68100-20000*pow(Ni,-1./3.);
-//    }
-//
-//    double dadt = -prefact*pow(ai,2)*exp(-B/temp_i);
-    return 0.;
-}
-
-
-
-double get_dadt(double ai, double *rpars){
-    if(dadt_mode == 1){
-        return dadt_c;
-    } else if(dadt_mode == 2) {
-        return dadt_c * ai;
-    } else if(dadt_mode == 3) {
-        return dadt_c * sin(2*M_PI * time/dadt_tscale);
-    }
-    double dadt = 0;
-    return dadt;
-}
 
 // GRAIN DISTRIBUTION EVOLUTION
 // GENERAL METHOD FROM McKinnon et al. 2018
@@ -152,12 +85,18 @@ double getSlope(double Nj, double Mj,int iabin){
 }
 // use Mj and Sj to solve for Number
 double getNumber(double Sj, double Mj,int iabin){
+    if(Mj <= 0){
+        return 0;
+    }
     return (Mj - Sj*SfactM[iabin])/NfactM[iabin];
 
 }
 
 // use Nj and Sj to solve for Mass
 double getMass(double Nj, double Sj,int iabin){
+    if(Nj <= 0) {
+        return 0;
+    }
     return Nj*NfactM[iabin] + Sj*SfactM[iabin];
 }
 
@@ -174,7 +113,7 @@ int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, in
     double dndap = Nj/dac + Sj*dap;
     double dnda  = Nj/dac + Sj*dam;
     // No grains, do nothing, set to zero
-    if(Nj <= 0 ){
+    if(Nj <= 0 || Mj <=0){
         *Njnew = 0;
         *Sjnew = 0;
     }
@@ -240,41 +179,46 @@ int rebinn(double dt){
     double Mn, Mnp, Mnm, Nn, Nnp, Nnm, Nntilde, Sn, Sntilde;
     // If we have silicates
     if(fSi > 0.0){
-        Mn  = Mnew[dust_nbins-2];
+
+        // upper boundary
         Mnp = Mnew[dust_nbins-1];
+        if(Mnp > 0){ 
+            // Does this boundary pile up? move dust grains to closest non-ghost cell 
+            if(dust_upperBound_pileUp){
+                Nnp = Mnp/pow(abin_e[Nabins-1], 3);
+                Mn  = Mnew[dust_nbins-2];
+                Nn  = Nnew[dust_nbins-2];
+                Sn  = Snew[dust_nbins-2];
+                // get updated bin values
+                ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
 
-        Nn  = Nnew[dust_nbins-2];
-        Nnp = Mnp/pow(abin_e[Nabins-1], 3);
-        
-        Sn  = Snew[dust_nbins-2];
-        
-        if(Nnp > 0){ 
-            // get updated bin values
-            ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
-
-            // Update the bins (and limit slope)
-            Mnew[dust_nbins-2] = Mn + Mnp;        
-            ierr = limitSlope(&Nnew[dust_nbins-2], &Snew[dust_nbins-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
+                // Update the bins (and limit slope)
+                Mnew[dust_nbins-2] = Mn + Mnp;        
+                ierr = limitSlope(&Nnew[dust_nbins-2], &Snew[dust_nbins-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
+            }
             Mnew[dust_nbins-1] = 0;      
             Nnew[dust_nbins-1] = 0;      
             Snew[dust_nbins-1] = 0;     
         } 
         
-        Mn  = Mnew[isilicone+1];
+        
+        // Lower boundary
         Mnm = Mnew[isilicone];
-
-        Nn  = Nnew[isilicone+1];
-        Nnm = Mnm/pow(abin_e[1], 3);
         
-        Sn  = Snew[isilicone+1];
-        
-        if(Nnm > 0){ 
-            // get updated bin values
-            ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
+        if(Mnm > 0){ 
+            if(dust_lowerBound_pileUp){
+                Nnm = Mnm/pow(abin_e[1], 3);
+                Mn  = Mnew[isilicone+1];
+                Nn  = Nnew[isilicone+1];
+                Sn  = Snew[isilicone+1];
+                // get updated bin values
+                ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
 
-            // Update the bins (and limit slope)
-            Mnew[isilicone+1] = Mn + Mnm;        
-            ierr = limitSlope(&Nnew[isilicone+1], &Snew[isilicone+1], Nntilde, Sntilde, Mn+Mnm, 1); 
+                // Update the bins (and limit slope)
+                Mnew[isilicone+1] = Mn + Mnm;        
+                ierr = limitSlope(&Nnew[isilicone+1], &Snew[isilicone+1], Nntilde, Sntilde, Mn+Mnm, 1); 
+            } 
+            
             Mnew[isilicone] = 0;      
             Nnew[isilicone] = 0;      
             Snew[isilicone] = 0;     
@@ -284,39 +228,41 @@ int rebinn(double dt){
     // if we have graphite grains
     if( isilicone > 0){
         // not same for carbonious grains
-        Mn  = Mnew[isilicone-2];
         Mnp = Mnew[isilicone-1];
-
-        Nn  = Nnew[isilicone-2];
-        Nnp = Mnp/pow(abin_e[Nabins-1],3);
-        Sn  = Snew[isilicone-2];
         // Do we have grains in ghost bin? if so fix
-        if(Nnp > 0){
-            // get updated bin values
-            ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
+        if(Mnp > 0){
+            if(dust_upperBound_pileUp){
+                Nnp = Mnp/pow(abin_e[Nabins-1],3);
+                // get updated bin values
+                Mn  = Mnew[isilicone-2];
+                Nn  = Nnew[isilicone-2];
+                Sn  = Snew[isilicone-2];
+                
+                ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
             
-            // Update the bins
-            Mnew[isilicone-2] = Mn + Mnp;
-            ierr = limitSlope(&Nnew[isilicone-2], &Snew[isilicone-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
+                 // Update the bins
+                Mnew[isilicone-2] = Mn + Mnp;
+                ierr = limitSlope(&Nnew[isilicone-2], &Snew[isilicone-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
+            }
             Mnew[isilicone-1] = 0;      
             Nnew[isilicone-1] = 0;      
             Snew[isilicone-1] = 0;  
         }    
         
-        Mn  = Mnew[1];
         Mnm = Mnew[0];
 
-        Nn  = Nnew[1];
-        Nnm = Mnm/pow(abin_e[1], 3);
-        
-        Sn  = Snew[1];
-        
-        if(Nnm > 0){ 
-            // get updated bin values
-            ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
-            // Update the bins (and limit slope)
-            Mnew[1] = Mn + Mnm;        
-            ierr = limitSlope(&Nnew[1], &Snew[1], Nntilde, Sntilde, Mn+Mnm, 1); 
+        if(Mnm > 0){ 
+            if(dust_lowerBound_pileUp){
+                Nnm = Mnm/pow(abin_e[1], 3);
+                Mn  = Mnew[1];
+                Nn  = Nnew[1];
+                Sn  = Snew[1];
+                // get updated bin values
+                ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
+                // Update the bins (and limit slope)
+                Mnew[1] = Mn + Mnm;        
+                ierr = limitSlope(&Nnew[1], &Snew[1], Nntilde, Sntilde, Mn+Mnm, 1); 
+            }
             Mnew[0] = 0;      
             Nnew[0] = 0;      
             Snew[0] = 0;     
@@ -328,9 +274,9 @@ int rebinn(double dt){
 int dustCell(double *rpars, int *ipars, double dt_step){
     int ibin, ibin2, iabin, iabin2, ierr;
     int rangeStart, rangeEnd, graphite;
-    double x1, x2;
-    double dt, time_dust;
-    double Nsum, Msum, Sest;
+    double x1, x2, intM, intN;
+    double dt, time_dust, dadt_max_cell;
+    double Nsum, Msum, Sest, NumTot_cell_g, NumTot_cell_s;
     double Mtot_old, Ntot_old, Mtot_new, Ntot_new, Ntot_mid;
     // Start by calculating change in size due to sublimation/sputtering/accretion
     //initialize by trying to take one full step
@@ -338,10 +284,26 @@ int dustCell(double *rpars, int *ipars, double dt_step){
     // try to take all in one step
     dt = dt_step;
     
+    // growth only dependent on current gas and radiation conditions.
+    // eg does not change within loop
+    ierr = set_dadt(rpars);
+   
+
+    // calculate total number of grains at start for normalisation
+    NumTot_cell_g = 0;
+    NumTot_cell_s = 0;
+    for(ibin = 0; ibin < dust_nbins; ibin++){
+        if(ibin < isilicone){
+            NumTot_cell_g += number[ibin];
+        } else {
+            NumTot_cell_s += number[ibin];
+        }
+    }
+    
     while(time_dust < dt_step){
-        // Calculate change in each bin and limit timestep in needed
         Mtot_old = 0;
         Ntot_old = 0;
+        // Calculate change in each bin and limit timestep in needed
         for(ibin = 0; ibin < dust_nbins; ibin++){
             if(ibin < isilicone){
                 graphite = 1;
@@ -351,18 +313,29 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             // graphite and silicone have the same size bins. Use half array 
             iabin = ibin - isilicone*(1-graphite);    
 
-            // Debug total mass and number before step
-            Ntot_old += number[ibin];
-            Mtot_old += getMass(number[ibin], slope[ibin],iabin); 
 
             // Temperature of dust grains in this bin
             //temp         = getDustTemp(abin_c[iabin], rpars);
                 
-            dadt[ibin]   = get_dadt(abin_c[iabin], rpars);
             //see if we have to limit the step
-            if(number[ibin] > 0 && dadt[ibin] > 0) {
-                dt = fmin(dt, dadt_lim * fabs((abin_e[iabin+1]-abin_e[iabin])/dadt[ibin]));
+            if(number[ibin] > 0 && fabs(dadt[ibin]) > 0) {
+                dadt_max_cell = dadt_lim * fabs((abin_e[iabin+1]-abin_e[iabin])/dadt[ibin]);
+                if(dadt_max_cell < dt){
+                    if(dt_step/dadt_max_cell > dust_maxSubSteps){
+                        if(dadt[ibin]*dt > abin_c[iabin]){
+                            number[ibin] = 0.0;
+                            slope[ibin]  = 0.0;
+                        } else {
+                            dt = dt_step/dust_maxSubSteps; 
+                        }
+                    } else {
+                        dt = dadt_max_cell;
+                    }
+                }
             }   
+            // Debug total mass and number before step
+            Ntot_old += number[ibin];
+            Mtot_old += getMass(number[ibin], slope[ibin],iabin); 
         }
         if(dt  < 0){
             return -1;
@@ -397,33 +370,55 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                 // left
                 x1 = fmax(abin_e[iabin2]  ,abin_e[iabin]   - dadt[ibin2]*dt);
                 // right
-                x2 = fmin(abin_e[iabin2+1],abin_e[iabin+1] - dadt[ibin2]*dt);
+                x2 = fmax(fmin(abin_e[iabin2+1],abin_e[iabin+1] - dadt[ibin2]*dt),0.0);
                 // If x2 > x1 then part of ibin2 will end up in ibin1
-                if( x1 > x2){
+                if( x1 >= x2){
                     continue;
                 }
                 // Total number of grains and mass from ibin2 that ends up in ibin 
-                Nsum = Nsum + intNj(ibin2, iabin2, x2    ) - intNj(ibin2, iabin2, x1);
+                intN = intNj(ibin2, iabin2, x2    ) - intNj(ibin2, iabin2, x1);
                 // Multiply by 4pi/3 rho later. Currently unneccesary
-                Msum = Msum + intMj(ibin2, iabin2, x2, dt) - intMj(ibin2, iabin2, x1, dt);
-            } 
-            Sest = getSlope(Nsum, Msum, iabin);
-            ierr = limitSlope(&Nnew[ibin], &Snew[ibin], Nsum, Sest, Msum, iabin); 
-            Mnew[ibin] = Msum;
+                intM = intMj(ibin2, iabin2, x2, dt) - intMj(ibin2, iabin2, x1, dt);
+                if(intN > 0 && intM >0){ 
+                    Nsum = Nsum + intN; 
+                    Msum = Msum + intM;
+                }
+            }
+            
+            if(Nsum < 0 || Msum < 0){
+                Nnew[ibin] = 0;
+                Snew[ibin] = 0;
+                Mnew[ibin] = 0;
+            } else {
 
-            Ntot_new += Nnew[ibin];
-            Ntot_mid += Nsum;
-            Mtot_new += Msum;
+                Sest = getSlope(Nsum, Msum, iabin);
+                ierr = limitSlope(&Nnew[ibin], &Snew[ibin], Nsum, Sest, Msum, iabin); 
+                Mnew[ibin] = Msum;
+
+                Ntot_new += Nnew[ibin];
+                Ntot_mid += Nsum;
+                Mtot_new += Msum;
+            }
 
         }
         ierr = rebinn(dt);
         if(ierr < 0){
             return -1;
         }
-        // set arrays TODO: figure out reasonable "fail" limit and redo step at smaller stepsize if met
+        // set arrays and recalculate number of grains in cell TODO: figure out reasonable "fail" limit and redo step at smaller stepsize if met
+        NumTot_cell_s = 0;
+        NumTot_cell_g = 0;
         for(ibin = 0; ibin < dust_nbins; ibin++){
+            if(Nnew[ibin] < 0){
+                printf("%d %.4e %.4e %.4e %.4e \n", ibin, Nnew[ibin], number[ibin], Snew[ibin], slope[ibin]);
+            }
             number[ibin] = Nnew[ibin];
             slope[ibin]  = Snew[ibin];
+            if(ibin < isilicone){
+                NumTot_cell_g += number[ibin];
+            } else {
+                NumTot_cell_s += number[ibin];
+            }
         }
         // update time
         time_dust = time_dust + dt;
@@ -477,7 +472,6 @@ int setBinsCell(int icell, double *Mtot){
         
         number[ibin] = getNumber(slope[ibin], mass/norm, iabin);
     }
-    printf("initial dust density =  %.4e\n", *Mtot);
     return 1;
 }
 
@@ -511,9 +505,7 @@ int getBinsCell(int icell, double *Mtot){
         ustate[icell*nvar + IDUST_START + NdustVar*idx    ] = mass * norm;
         ustate[icell*nvar + IDUST_START + NdustVar*idx + 1] = slope[ibin];
     }
-    printf("final dust density =  %.4e\n", *Mtot);
     return 1;
-
 }
 
 #endif

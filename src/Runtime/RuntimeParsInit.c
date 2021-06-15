@@ -4,8 +4,8 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "rtpars.h"
-#include "cgeneral.h"
+#include <rtpars.h>
+#include <cgeneral.h>
 
 int nrealRTPars = 4;
 real_list_t *RTDPars = NULL;

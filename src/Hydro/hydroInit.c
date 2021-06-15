@@ -4,14 +4,14 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "hydro.h"
-#include "cgeneral.h"
-#include "radchem.h"
+#include <hydro.h>
+#include <cgeneral.h>
+#include <radchem.h>
 #ifdef useDust
-    #include "dust.h"
+    #include <dust.h>
 #endif
 
-int nrealHydroPars = 15;
+int nrealHydroPars = 16;
 real_list_t *hydroDPars = NULL;
 int nintHydroPars = 8;
 int_list_t *hydroIPars = NULL;
@@ -70,6 +70,7 @@ int setHydroPars(){
 
     strcpy(hydroDPars[7].name, "rL"); hydroDPars[7].value = 0.; 
     strcpy(hydroDPars[8].name, "rR"); hydroDPars[8].value = 100.; 
+    strcpy(hydroDPars[15].name, "orth_extent"); hydroDPars[15].value = -1.0; 
     
     strcpy(hydroDPars[9].name, "bdensR"); hydroDPars[9].value = 1.; 
     strcpy(hydroDPars[10].name, "bvelR"); hydroDPars[10].value = 1.; 
@@ -347,9 +348,28 @@ int init_grid(){
             if(geometry == 1){
                 vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
             } else {
-                vol[icell] = dr_const*orth_extent*orth_extent;
+                vol[icell] = dr[icell]*orth_extent*orth_extent;
             }
         }
+        rp = (rs[1] + rs[0])*0.5;
+        rm = rs[0] + (rs[0]-rp);
+        dr[0] = rp-rm;
+        if(geometry == 1){
+            vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
+        } else {
+            vol[icell] = dr[icell]*orth_extent*orth_extent;
+        }
+
+        rm = (rs[NCELLS-1] + rs[NCELLS-2])*0.5;
+        rp = rs[NCELLS-1] + (rs[NCELLS-1]-rm);
+        dr[NCELLS-1] = rp-rm;
+        if(geometry == 1){
+            vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
+        } else {
+            vol[icell] = dr[icell]*orth_extent*orth_extent;
+        }
+
+
     }
    return 1; 
 }
@@ -382,7 +402,7 @@ int init_domain(){
     double dust_to_gas_ratio;
     getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
     for(icell = NGHOST; icell < NCELLS - NGHOST; icell++){
-        dustMass = dust_to_gas_ratio * ustate[icell*nvar];
+        dustMass = dust_to_gas_ratio * 1e-2 * ustate[icell*nvar];
         setCellInit(icell, dustMass);
     } 
 #endif 

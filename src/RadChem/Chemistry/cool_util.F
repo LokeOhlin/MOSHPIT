@@ -790,9 +790,14 @@ c
           dfa    = - fa * (1 - fa) * (6e2 / tdust**2e0)
           dtrdust = ch7 * stick * (dfa - 2e-2 * stick * fa / 
      $            sqrt(tdust + temp))
-          Rdust  = ch7 * fa * stick
           Rdust_rat = (dfa / fa - 2e-2 * stick / sqrt(tdust + temp))
+#ifdef PDRtestChem
+          Rdust = 3e-18*temp**0.5
+          RH2   = Rdust * abHI * yn**2e0
+#else
+          Rdust  = ch7 * fa * stick
           RH2 = Rdust * abHI * yn**2.e0
+#endif
 c
 #ifdef NO_DUST_H2_HEAT
           dust_h2_heat = 0e0

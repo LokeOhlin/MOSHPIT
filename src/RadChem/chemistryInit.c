@@ -4,11 +4,11 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "hydro.h"
-#include "radchem.h"
-#include "cgeneral.h"
+#include <hydro.h>
+#include <radchem.h>
+#include <cgeneral.h>
 #ifdef useDust
-    #include "dust.h"
+    #include <dust.h>
 #endif
 
 int nrealPars = 26;
@@ -52,14 +52,14 @@ int setChemistryPars(){
     strcpy(chemDPars[14].name, "ch_cosmic_ray_ion_rate");  chemDPars[14].value = 3e-17;
     strcpy(chemDPars[15].name, "ch_redshift");             chemDPars[15].value = 0e0;
     strcpy(chemDPars[16].name, "ch_NH_ext");               chemDPars[16].value = 1e20;
-    strcpy(chemDPars[17].name, "ch_h2_form_ex");           chemDPars[17].value = 0e0;
-    strcpy(chemDPars[18].name, "ch_h2_form_kin");          chemDPars[18].value = 0e0;
+    strcpy(chemDPars[17].name, "ch_h2_form_ex");           chemDPars[17].value = 8.38e-1;
+    strcpy(chemDPars[18].name, "ch_h2_form_kin");          chemDPars[18].value = 1.18e-1;
     strcpy(chemDPars[19].name, "ch_xray_scaling");         chemDPars[19].value = 1e0;
     strcpy(chemDPars[20].name, "ch_Z_atom");               chemDPars[20].value = 1e0;
     strcpy(chemDPars[21].name, "ch_max_ion_frac_change");  chemDPars[21].value = 1e-1;
     strcpy(chemDPars[22].name, "Tstar");  chemDPars[22].value = 5e3;
     strcpy(chemDPars[23].name, "Lstar");  chemDPars[23].value = 1e5;
-    strcpy(chemDPars[24].name, "radEmin");  chemDPars[24].value = 1.6e-17;
+    strcpy(chemDPars[24].name, "radEmin");  chemDPars[24].value = 1.6e-15;
     strcpy(chemDPars[25].name, "radEmax");  chemDPars[25].value = 1.6e-10;
     
     // Integer parameters
@@ -136,13 +136,13 @@ int initChemistry(){
     
     //Call intit for fortran functions
     Chemistry_FortranInit();
+    #ifdef useDust 
+        //Init Dust
+        initDust();
+    #endif    
     
     //Init radiation
     initRadiation();
-#ifdef useDust 
-    //Init Dust
-    initDust();
-#endif    
     return 1;
 
 }

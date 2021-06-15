@@ -1,6 +1,6 @@
 #ifndef radchem
 #define radchem
-#include "radchem.h"
+#include <radchem.h>
 void setRadiationData(double *radData, double dt);
 void cellAbsorption(double *radData, double *specData, double numd, double Temp, double dr, double vol, double dt, double *absData);
 int doChemistryStep(double dt, double *dt_chem);
@@ -15,7 +15,7 @@ void getintegerchemistrypar(char *name, int *value);
 void setFromStellarModel();
 void setFromFile();
 #endif
-extern double abar, mf_scale, abundC, abundO, abundSi, ch_mH, ch_kb, ch_muC;
+extern double abar, mf_scale, abundHe, abundC, abundO, abundSi, ch_mH, ch_kb, ch_muC;
 extern int useRadiationPressure;
 extern int numBinsSubIon;  // all bins below 11.2 eV
 extern int numBinsFullIon; // all bins above 15.2 eV

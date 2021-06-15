@@ -1,7 +1,7 @@
+#include <hdf5.h>
 #ifndef dust
 #define dust
 #include "dust.h"
-
 
 #define dust_nghost 1
 // Initialisation methods
@@ -34,6 +34,24 @@ int localToGlobalIndex(int ibin);
 
 // Main call to update dust distribution
 int dustCell(double *rpars, int *ipars, double dt_step);
+
+// methods used in sputtering 
+// loading tables
+int loadDustSputteringTables();
+// getting indexes
+int getSputYield_ida(double agrain, int graphite);
+int getSputYield_idt(double tgas, int graphite);
+// getting and calcualtint yields and sputtering rates
+double getSputYield_t(double tgas, int graphite, int ida, int *idt);
+double getSputYield(double agrain, double tgas, int graphite, int *ida, int *idt);
+double get_dadt_sputtering(double agrain, int ibin, int iabin, int graphite, double numd, double tgas, int *idt);
+
+// general method to calculate growth for each dustbin
+int set_dadt(double *rpars);
+
+
+int outputDustCell(int icell, double dr);
+int initDustOutput(double dt);
 #endif
 // Scratch arrays
 extern double *dadt, *number, *slope, *Mnew, *Nnew, *Snew;
@@ -41,16 +59,38 @@ extern double *dadt, *number, *slope, *Mnew, *Nnew, *Snew;
 extern double *abin_e, *abin_c;
 extern double *NfactM, *NfactA;
 extern double *SfactM, *SfactA; 
+extern double *pi_asquare;
+extern double *volgrains;
 
 extern int dust_nbins, Nabins, isilicone;
 // mass fraction of silicates
 extern double fSi;
-// density of silicates
+// density and average atom mass of silicates 
 extern double rho_s;
-// density of graphites
+extern double aveMatom_s; //(~20 mH)
+// density and average atom mass of graphites
 extern double rho_c;
+extern double aveMatom_c; //(~12 mH)
+// Number of atoms in a grain
+extern double *Natoms;
+
 // Options for dust growth
 extern int dadt_mode;
 extern double dadt_c, dadt_tscale;
 // Timestep limiter
 extern double dadt_lim;
+
+// flag for use of sputtering
+extern int dust_useSputtering;
+// index of dustgrain in sputtering table
+extern int *ida_tabSput;
+
+extern int dust_maxSubSteps;
+
+// options for behaviour at upper and lower bound
+extern int dust_lowerBound_pileUp;
+extern int dust_upperBound_pileUp;
+
+extern hid_t dustOutput;
+extern int outputDust;
+extern int outputNum;

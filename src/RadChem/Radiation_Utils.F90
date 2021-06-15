@@ -191,7 +191,10 @@
 ! energy per emitted photon
       if(ul .gt. 0.0) then
         phEnergy = Teff*rt_boltz*( (energyll - energyul)/ (nPhotll - nPhotul))
+        !write(*,*) '------------------------'
+        !write(*,*) Teff, rt_boltz, energyll, energyul, nPhotll, nPhotul
         phNumber = prefac2*(nPhotll - nPhotul)*sigma
+        !write(*,*) prefac2, nPhotll, nPhotul
       else
         phEnergy = energyll/nPhotll*Teff*rt_boltz
 !        phNumber = prefac2*ratell

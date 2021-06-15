@@ -338,8 +338,8 @@ c
      $      - 0.5e0 * cr2 * abh2   ! Fudge factor of two gives correct HI production
      $          -   cr10  * abh2
      $          -   cr11  * abh2
-     $          -   h2phih* abh2 	 ! dissociation from ionising radiation
-     $          -   uvphih* abh2 	 ! dissociation from stellar UV
+     $          -   h2phih* abh2  ! dissociation from ionising radiation
+     $          -   uvphih* abh2  ! dissociation from stellar UV
 #endif
 
 #if CHEMISTRYNETWORK == 5
@@ -432,9 +432,9 @@ c
 c Dust -- 4.48eV 
 c
       if (RH2 .gt. 0e0) then
-c        call compute_h2_heating_fraction(temp, yn, abh2, f_ex)
-c        f_ex = f_ex * h2_form_ex
-        f_ex = 0e0
+        call compute_h2_heating_fraction(temp, yn, abh2, f_ex)
+        f_ex = f_ex * h2_form_ex
+c        f_ex = 0e0
       else
         f_ex = 0e0
       endif

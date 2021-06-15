@@ -1,6 +1,6 @@
 #ifndef HYDRO
 #define HYDRO
-#include "hydro.h"
+#include <hydro.h>
 
 // How large does our arrays have to be?
 // eg how many variables and species

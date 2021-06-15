@@ -4,18 +4,16 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "hydro.h"
-#include "IO.h"
-#include "cgeneral.h"
-#include "init.h"
-#include "rtpars.h"
-#ifdef useChemistry
-#include "radchem.h"
+#include <hydro.h>
+#include <IO.h>
+#include <cgeneral.h>
+#include <init.h>
+#include <rtpars.h>
+#include <radchem.h>
 #ifdef useDust
-#include "dust.h"
+#include <dust.h>
 #endif
-#endif
-
+#include <mechanicalFeedback.h>
 
 int readParameterFile(){
     int ichar, endchar;
@@ -74,8 +72,13 @@ int readParameterFile(){
         if(found > 0){
             continue;
         }
+        found = checkFeedbackPars(name, value);
+        if(found > 0){
+            continue;
+        }
         printf("Parameter not found : %s \n",name);
     }
+    fclose(fptr);
     return 1;
 }
 // Wrapper to init all other modules & initialise the domain
@@ -90,6 +93,7 @@ int initSimulation(){
 #ifdef useDust
     ierr = setDustPars();
 #endif
+    ierr = setFeedbackPars();
     printf("\treading parameter file\n");
     ierr = readParameterFile();
     if(ierr < 0){
@@ -115,6 +119,13 @@ int initSimulation(){
     if(ierr < 0){
         return ierr;
     }
+    
+    printf("\tcalling initFeedback\n");
+    ierr = initFeedback();
+    if(ierr < 0){
+        return ierr;
+    }
+
     return 1;
 }
 

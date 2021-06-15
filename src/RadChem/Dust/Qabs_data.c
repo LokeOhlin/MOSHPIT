@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -141,7 +142,7 @@ int loadQabsTable(char *qabsTable, int graphite){
         Qabs_s_tab_minFreq = Qabs_s_tab_freqs[0];
         Qabs_s_tab_maxFreq = Qabs_s_tab_freqs[tab_nf - 1];
     }
-
+    fclose(fptr);
     return 1;
 }
 
@@ -208,6 +209,7 @@ int loadQemTable(char *qemTable){
     Qem_tab_minTemp = Qem_tab_temp[0];
     Qem_tab_maxTemp = Qem_tab_temp[tab_nt - 1];
     
+    fclose(fptr);
     return 1;
 }
 

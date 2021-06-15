@@ -4,18 +4,23 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "dustRadiation.h"
-#include "cgeneral.h"
-#include "dust.h"
-
+#include <dustRadiation.h>
+#include <cgeneral.h>
+#include <dust.h>
+#include <constantsAndUnits.h>
+#ifdef useDust
 int nphotBins;
+
 double EbinMax;
-double *Ephots = NULL;
-double *Nphots = NULL;
-double *NphotsE = NULL;
-double *dEphots = NULL;
-double *ELphots = NULL;
-double *ERphots = NULL;
+
+double *dust_Ephots = NULL;
+double *dust_Nphots = NULL;
+double *dust_NphotsE = NULL;
+double *dust_dEphots = NULL;
+double *dust_ELphots = NULL;
+double *dust_ERphots = NULL;
+
+double *tauDust = NULL;
 double *QabsBin = NULL;
 double *NabsBinE = NULL;
 double *EabsBinE = NULL;
@@ -25,24 +30,31 @@ int initDustRadiation(int Nbins, double *Ebins){
     // In:
     //      Nbins   -   Number of radiation bins
     //      Ebins   -   edges of the radiation bins, size Nbins + 1
-    int iphotBin;
+    
+    if(dust_useRadiation == 0) return 1;
+    int iphotBin,idx;
     nphotBins = Nbins;
-    Ephots  = (double *) malloc(nphotBins * sizeof(double));
-    Nphots  = (double *) malloc(nphotBins * sizeof(double));
-    NphotsE = (double *) malloc(nphotBins * sizeof(double));
-    dEphots = (double *) malloc(nphotBins * sizeof(double));
-    ELphots = (double *) malloc(nphotBins * sizeof(double));
-    ERphots = (double *) malloc(nphotBins * sizeof(double));
-    QabsBin = (double *) malloc(nphotBins * dust_nbins * sizeof(double));
-    NabsBinE = (double *) malloc(nphotBins * dust_nbins * sizeof(double));
-    EabsBinE = (double *) malloc(nphotBins * dust_nbins * sizeof(double));
+    dust_Ephots  = (double *) malloc(nphotBins * sizeof(double));
+    dust_Nphots  = (double *) malloc(nphotBins * sizeof(double));
+    dust_NphotsE = (double *) malloc(nphotBins * sizeof(double));
+    dust_dEphots = (double *) malloc(nphotBins * sizeof(double));
+    dust_ELphots = (double *) malloc(nphotBins * sizeof(double));
+    dust_ERphots = (double *) malloc(nphotBins * sizeof(double));
+    QabsBin      = (double *) malloc(nphotBins * dust_nbins * sizeof(double));
+    tauDust      = (double *) malloc(nphotBins * NdustBins  * sizeof(double));
+    NabsBinE     = (double *) malloc(nphotBins * dust_nbins * sizeof(double));
+    EabsBinE     = (double *) malloc(nphotBins * dust_nbins * sizeof(double));
     // store binsizes
     for( iphotBin = 0; iphotBin < nphotBins; iphotBin++){
-        ELphots[iphotBin] = Ebins[iphotBin];
-        ERphots[iphotBin] = Ebins[iphotBin + 1];
-        dEphots[iphotBin] = ERphots[iphotBin] - ELphots[iphotBin];
+        dust_ELphots[iphotBin] = Ebins[iphotBin];
+        dust_ERphots[iphotBin] = Ebins[iphotBin + 1];
+        dust_dEphots[iphotBin] = dust_ERphots[iphotBin] - dust_ELphots[iphotBin];
+        for(int idustBin = 0; idustBin < dust_nbins; idustBin ++){
+            idx = idustBin * nphotBins + iphotBin;
+            QabsBin[idx] = 0;
+        }
     }
-    EbinMax = ERphots[nphotBins -1];
+    EbinMax = dust_ERphots[nphotBins -1];
     return 1;
 }
 
@@ -56,75 +68,135 @@ int setRadiationBins(double *radData, double dt, double geoFact){
     //      dt       -  size of current time step. Needed to convert number to rate
     //      geofact  -  inverted size of surface. Needed to convert rate to flux
     
-    int iphotBin, idustBin, idx, graphite;
+    if(dust_useRadiation == 0) return 1;
+    int iphotBin, idustBin, idx, graphite, iabin;
     double aveNu;
     for(iphotBin = 0; iphotBin < nphotBins; iphotBin++){
-        Nphots[iphotBin] = radData[iphotBin] * geoFact / dt;  // make into flux
-        NphotsE[iphotBin] = radData[iphotBin]/dEphots[iphotBin];  // make into flux
-        Ephots[iphotBin] = radData[iphotBin + nphotBins];
-        aveNu = Ephots[iphotBin]*planckInv;
+        dust_Nphots[iphotBin] = radData[iphotBin] * geoFact / dt;  // make into flux
+        dust_NphotsE[iphotBin] = radData[iphotBin]/dust_dEphots[iphotBin] * geoFact / dt;  // make into flux
+        dust_Ephots[iphotBin] = radData[iphotBin + nphotBins];
+        aveNu = dust_Ephots[iphotBin]*planckInv;
         for(idustBin = 0; idustBin < dust_nbins; idustBin++){
-            graphite = (idustBin < isilicone);
+            if(idustBin < isilicone){
+                graphite = 1;
+                iabin = idustBin;
+            } else {
+                graphite = 0;
+                iabin = idustBin - isilicone;
+            }
             idx = idustBin * nphotBins + iphotBin;
-            QabsBin[idx] = getQabs(abin_c[idustBin], aveNu, graphite, ida_tabQabs[idustBin], -1);
-            NabsBinE[idx] = QabsBin[idx] * NphotsE[iphotBin];
-            EabsBinE[idx] = QabsBin[idx] * NphotsE[iphotBin] * Ephots[iphotBin];
+            if(idx < 0 || idx > nphotBins*dust_nbins){
+                printf("%d %d %d\n", iphotBin, idx, nphotBins*dust_nbins);
+            }
+            QabsBin[idx] = getQabs(abin_c[iabin], aveNu, graphite, ida_tabQabs[idustBin], -1);
+            NabsBinE[idx] = QabsBin[idx] * dust_NphotsE[iphotBin];
+            EabsBinE[idx] = QabsBin[idx] * dust_NphotsE[iphotBin] * dust_Ephots[iphotBin];
         }
     }
-    return 0;
+    return 1;
 }
 
+double getDustOpticalDepth(int iEbin, double dr){
+    double tauDustTot=0;
+    double numDust;
+    if(dust_useRadiation == 0) return 0.0;
+    int ibin, idx, graphite, iabin;
+    for(idx = 0; idx < NdustBins; idx++){
+        ibin = globalToLocalIndex(idx);
+        if(ibin < isilicone){
+            graphite = 1;
+        } else {
+            graphite = 0;
+        }
+        iabin = ibin - isilicone * (1-graphite); 
+        tauDustTot += number[ibin] * QabsBin[ibin*nphotBins + iEbin] * pi_asquare[iabin];
+    }
+    return tauDustTot * dr; 
+}
 
+int setDustOpticalDepthArray(double dr){
+    // only used for outputs
+    double numDust;
+    int iphotBin;
+    int ibin, idx, graphite, iabin, idq, idq2;
+    for(idx = 0; idx < NdustBins; idx++){
+        ibin = globalToLocalIndex(idx);
+        if(ibin < isilicone){
+            graphite = 1;
+        } else {
+            graphite = 0;
+        }
+        iabin = ibin - isilicone * (1-graphite); 
+        
+        for(iphotBin = 0; iphotBin < nphotBins; iphotBin++){
+            idq  = idx * nphotBins + iphotBin;
+            idq2 = ibin * nphotBins + iphotBin;
+            tauDust[idq] = number[ibin] * QabsBin[idq2] * pi_asquare[iabin];
+        }
+    }
+    return 1;
+}
 //loop over all photon bins and sum up absorbed energy
 double getAbsorption(int ibin, int graphite){
-     int iphotBin;
+     int iphotBin, iabin;
      double aveNu, aveEphot, Qabs, EabsNu, EabsTot;
      EabsTot = 0;
      for (iphotBin = 0; iphotBin < nphotBins; iphotBin++){
           // average photon energy in bin
-          aveEphot = Ephots[iphotBin];
+          aveEphot = dust_Ephots[iphotBin];
           aveNu = aveEphot*planckInv;
           
           Qabs = QabsBin[ibin*nphotBins + iphotBin]; //getQabs(abin_c[ibin], aveNu, graphite, ida_tabQabs[ibin], -1);
-          EabsNu = Nphots[iphotBin] * aveEphot * Qabs;
+          EabsNu = dust_Nphots[iphotBin] * aveEphot * Qabs;
           EabsTot = EabsTot + EabsNu;
     
      }
-     return EabsTot * pi_asquare[ibin];
+     if(ibin < isilicone){
+        iabin = ibin;
+     } else {
+        iabin = ibin - isilicone;
+     }
+     return EabsTot * pi_asquare[iabin];
 }
 
 //loop over all photon bins and sum up absorbed energy from all within specified range
 double getAbsorption_range(int ibin, int graphite, double nuMin, double nuMax){
-     int iphotBin, firstBin;
+     int iphotBin, firstBin, iabin;
      double aveNu, aveEphot, Qabs, EabsNu, EabsTot;
      double Emax = nuMax*planck;
      double Emin = nuMin*planck;
      double leftEdge, rightEdge;
      EabsTot = 0;
-     firstBin = binarySearch(Emin, ELphots, nphotBins);
+     firstBin = binarySearch(Emin, dust_ELphots, nphotBins);
      for (iphotBin = 0; iphotBin < nphotBins; iphotBin++){
-          if(ERphots[iphotBin] < Emin){
+         if(dust_ERphots[iphotBin] < Emin){
               continue; // Ebins from lowest to highest
           }
-          if(ELphots[iphotBin] > Emax){
+          if(dust_ELphots[iphotBin] > Emax){
               break;
           } 
           //Figure out how much of range is within the bin.
-          leftEdge  = fmax(Emin, ELphots[iphotBin]);
-          rightEdge = fmin(Emax, ERphots[iphotBin]);
-          aveEphot = Ephots[iphotBin];
+          leftEdge  = fmax(Emin, dust_ELphots[iphotBin]);
+          rightEdge = fmin(Emax, dust_ERphots[iphotBin]);
+          aveEphot = dust_Ephots[iphotBin];
           Qabs = QabsBin[ibin*nphotBins + iphotBin]; //getQabs(abin_c[ibin], aveNu, graphite, ida_tabQabs[ibin], -1);
-          EabsNu = NphotsE[iphotBin] * aveEphot * Qabs * (rightEdge - leftEdge);
+          EabsNu = dust_NphotsE[iphotBin] * aveEphot * Qabs * (rightEdge - leftEdge);
           EabsTot = EabsTot + EabsNu;
      }
-     EabsTot = EabsTot * pi_asquare[ibin];
+
+     if(ibin < isilicone){
+        iabin = ibin;
+     } else {
+        iabin = ibin - isilicone;
+     }
+     EabsTot = EabsTot * pi_asquare[iabin];
      return EabsTot;
 }
 
 
 //same but only number of photons
 double getAbsorptionNum_range(int ibin, int graphite, double Emin, double Emax){
-     int iphotBin, firstBin;
+     int iphotBin, firstBin, iabin;
      double aveNu, aveEphot, Qabs, NabsNu, NabsTot;
      double leftEdge, rightEdge;
      if(EbinMax < Emin){
@@ -133,21 +205,26 @@ double getAbsorptionNum_range(int ibin, int graphite, double Emin, double Emax){
      NabsTot = 0;
      int idx = ibin * nphotBins;
      if(Emin > 0){ 
-         firstBin = binarySearch(Emin, ELphots, nphotBins);
+         firstBin = binarySearch(Emin, dust_ELphots, nphotBins);
      } else {
          firstBin = 0;
      }
      for (iphotBin = firstBin; iphotBin < nphotBins; iphotBin++){
-          if(ERphots[iphotBin] < Emin){
+          if(dust_ERphots[iphotBin] < Emin){
               continue; // Ebins from lowest to highest
           }
           //Figure out how much of range is within the bin.
-          leftEdge  = fmax(Emin, ELphots[iphotBin]);
-          rightEdge = fmin(Emax, ERphots[iphotBin]);
+          leftEdge  = fmax(Emin, dust_ELphots[iphotBin]);
+          rightEdge = fmin(Emax, dust_ERphots[iphotBin]);
           NabsNu = NabsBinE[idx + iphotBin] * (rightEdge - leftEdge);
           NabsTot = NabsTot + NabsNu;
      }
-     return NabsTot*pi_asquare[ibin];
+     if(ibin < isilicone){
+        iabin = ibin;
+     } else {
+        iabin = ibin - isilicone;
+     }
+     return NabsTot*pi_asquare[iabin];
 }
 
 
@@ -158,21 +235,21 @@ double getRadEdens(double freq){
     // Energy of desired photons
     double Ener = freq*planck;
     EabsTot = 0;
-    if(Ener > ERphots[nphotBins - 1]){
+    if(Ener > dust_ERphots[nphotBins - 1]){
        return 0;
     }
-    if(Ener < ELphots[0]){
+    if(Ener < dust_ELphots[0]){
        return 0;
     }
 
-    iphotBin = binarySearch(Ener, ELphots, nphotBins);
-    return Nphots[iphotBin]*Ephots[iphotBin]*planck/clght/dEphots[iphotBin];
+    iphotBin = binarySearch(Ener, dust_ELphots, nphotBins);
+    return dust_Nphots[iphotBin]*dust_Ephots[iphotBin]*planck/clght/dust_dEphots[iphotBin];
 }
 
 
 //loop over all photon bins and calculate transition from one dust energy bin to another
 double getUpwardTransition(int ibin, int graphite, double Ui, double UiL, double UiR, double dUi, double Uf, double UfL, double UfR, double dUf, double continousBound){
-    int iphotBin, firstBin, idx;
+    int iphotBin, firstBin, idx, iabin;
     double aveNu, aveEphot, Qabs, NabsE, EabsTot;
     double leftEdge, rightEdge, ER, EL;
     double finiteWidthFactor;
@@ -189,19 +266,19 @@ double getUpwardTransition(int ibin, int graphite, double Ui, double UiL, double
     double uppRate = 0;
     idx = ibin * nphotBins;
     if(Emin > 0){ 
-        firstBin = binarySearch(Emin, ELphots, nphotBins);
+        firstBin = binarySearch(Emin, dust_ELphots, nphotBins);
     } else {
         firstBin = 0;
     }
     for (iphotBin = firstBin; iphotBin < nphotBins; iphotBin++){
-        //if(ERphots[iphotBin] < Emin){ //SHOULD NOT BE NEEDED DUE TO FIRSTBIN
+        //if(dust_ERphots[iphotBin] < Emin){ //SHOULD NOT BE NEEDED DUE TO FIRSTBIN
         //    continue; // Ebins from lowest to highest
         //} 
-        EL = ELphots[iphotBin];
+        EL = dust_ELphots[iphotBin];
         if(EL > Emax){
             break;
         } 
-        ER = ERphots[iphotBin];
+        ER = dust_ERphots[iphotBin];
         // We assume that the energy density of photons uE is constant in each photon bin.
         // We also assume that Qabs is constant within the bin which then means 
         //
@@ -213,8 +290,8 @@ double getUpwardTransition(int ibin, int graphite, double Ui, double UiL, double
         
         NabsE = EabsBinE[idx + iphotBin]; // getQabs(abin_c[ibin], aveNu, graphite, ida_tabQabs[ibin], -1);
         //Qabs     = QabsBin[ibin*nphotBins + iphotBin]; // getQabs(abin_c[ibin], aveNu, graphite, ida_tabQabs[ibin], -1);
-        //EabsNu   = NphotsE[iphotBin] * Qabs;
-        //EabsNu   = Nphots[iphotBin] * aveEphot * Qabs / dEphots[iphotBin];
+        //EabsNu   = dust_NphotsE[iphotBin] * Qabs;
+        //EabsNu   = dust_Nphots[iphotBin] * aveEphot * Qabs / dust_dEphots[iphotBin];
         
         // 1) 
         if(EL < MinEdgeDistance){
@@ -245,29 +322,39 @@ double getUpwardTransition(int ibin, int graphite, double Ui, double UiL, double
         uppRate = uppRate + finiteWidthFactor * NabsE; 
 
     }
-    uppRate = uppRate * pi_asquare[ibin]  / dUi / (Uf - Ui);
+    if(ibin < isilicone){
+       iabin = ibin;
+    } else {
+       iabin = ibin - isilicone;
+    }
+    uppRate = uppRate * pi_asquare[iabin]  / dUi / (Uf - Ui);
     return uppRate;
 }
 
 double intrabinUpwardTransition(int ibin, int graphite, double dUi, double Ui, double Uf){
-    int iphotBin;
+    int iphotBin, iabin;
     double aveNu, aveEphot, Qabs, EabsNu, EabsTot;
     double leftEdge, rightEdge;
     double dUiInv = 1/dUi; 
     double uppRate = 0;
     int idx = ibin * nphotBins;
     for (iphotBin = 0; iphotBin < nphotBins; iphotBin++){
-        leftEdge  = ELphots[iphotBin];
+        leftEdge  = dust_ELphots[iphotBin];
         if(leftEdge > dUi){
             break;
         } 
         EabsNu   = EabsBinE[idx + iphotBin]; //getQabs(abin_c[ibin], aveNu, graphite, ida_tabQabs[ibin], -1);
-        rightEdge = fmin(dUi, ERphots[iphotBin]); 
+        rightEdge = fmin(dUi, dust_ERphots[iphotBin]); 
         uppRate = uppRate + EabsNu * ( (rightEdge - leftEdge) - 0.5 * (rightEdge*rightEdge - leftEdge*leftEdge)*dUiInv); 
 
     }
-    uppRate = uppRate * pi_asquare[ibin]  / (Uf - Ui);
+    if(ibin < isilicone){
+       iabin = ibin;
+    } else {
+       iabin = ibin - isilicone;
+    }
+    uppRate = uppRate * pi_asquare[iabin]  / (Uf - Ui);
     return uppRate;
 }
 
-
+#endif

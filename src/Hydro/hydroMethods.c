@@ -4,13 +4,16 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "hydro.h"
+#include <hydro.h>
 
 
 int getCFL(double *cfl){
     int icell;
     double rho, rhoinv, pre, cs, vel, wspeed;
-    
+    if(useHydro == 0){ // if no hydro no cfl
+        cfl[0] = 1e99;
+        return 1;
+    }
     cfl[0]=0; // initially inverted 
     for(icell = 2; icell < NCELLS-2; icell++){
         rho = ustate[icell*nvar];
@@ -120,7 +123,7 @@ int toPrimitive(){
         pstate[idx + 2]= rho * eint * (adi-1);
 #ifdef useChemistry
         // copy over mass fractions
-        for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
+        for(ivar = ICHEM_START; ivar < ICHEM_END + 1; ivar++){
             pstate[idx + ivar] = ustate[idx + ivar];
         }
 #endif 
@@ -378,6 +381,16 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
             var0 = qR[ivar];
         }   
         flux[ivar] = var0*vel0;
+    }
+#endif
+#ifdef useDust
+    for(ivar = IDUST_START; ivar < nvar; ivar++){
+        //if(velS > 0){
+        //    var0 = qL[ivar];
+        //} else {
+        //    var0 = qR[ivar];
+        //}   
+        flux[ivar] = 0;//var0*vel0;
     }
 #endif
     return 1;

@@ -4,10 +4,10 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "hydro.h"
-#include "IO.h"
+#include <hydro.h>
+#include <IO.h>
 #ifdef useDust 
-    #include "dust.h"
+    #include <dust.h>
 #endif
 int makeOutput(double t, char *outputName){
     int icell,ivar,idx, ierr;

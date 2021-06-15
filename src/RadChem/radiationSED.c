@@ -4,8 +4,8 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "radchem.h"
-
+#include <radchem.h>
+#include <constantsAndUnits.h>
 
 //Piecewise H2 cross section
 //{0, 0 <= nu <= 15.2}, {0.09*Mb, 15.2 < nu <= 15.45}, 
@@ -40,6 +40,7 @@ double get_sigmaH2(double ephot){
             return tab_ss[iEbin];
         }
     }
+    return 0;
 }
 
 void setFromStellarModel(){
@@ -47,15 +48,13 @@ void setFromStellarModel(){
     double Npeh0, Ndis0, Nion0, NionH20;
     double Teff, Lstar, RstarSQ;
     double inf = -1.0;
-    double boltzy = 5.6704e-5;
-    double Lsun   = 3.838e+33;
     double tmp = 1.0, tmp2;
     int iEbin;
     
     getrealchemistrypar("Tstar", &Teff);
     getrealchemistrypar("Lstar", &Lstar);
 
-    RstarSQ = Lstar * Lsun/(4*M_PI*Teff*Teff*Teff*Teff*boltzy);
+    RstarSQ = Lstar * Lsun/(4*M_PI*Teff*Teff*Teff*Teff*sigma_stefanBoltz);
 
     // treat the special bins
     // 13.6 to 15.2
@@ -156,7 +155,7 @@ void setFromFile(){
         iEbin++;
     }
     if(nFileBins != numRadiationBins){
-            printf("ERROR: number of radiation bins in sed.dat (>%d) not equal to defined number of bins (%d)\n", nFileBins, numRadiationBins);
+            printf("ERROR: number of radiation bins in sed.dat (%d) not equal to defined number of bins (%d)\n", nFileBins, numRadiationBins);
             exit(-1);
     }
 }

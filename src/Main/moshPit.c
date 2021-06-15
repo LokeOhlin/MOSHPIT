@@ -4,21 +4,25 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "init.h"
-#include "hydro.h"
-#include "IO.h"
-#include "rtpars.h"
+#include <init.h>
+#include <hydro.h>
+#include <IO.h>
+#include <rtpars.h>
 #ifdef useChemistry
-#include "radchem.h"
+#include <radchem.h>
 #endif
-#include "moshpit.h"
+#ifdef useDust
+#include <dust.h>
+#endif
+#include <mechanicalFeedback.h>
+#include <moshpit.h>
 
 double time;
 
 int mainLoop(){
     int istep = 0, io=0, iostep=0, ierr;
     char fname[8] = "output_", outputName[12]="", fnum[5]="";
-    double dt, dt_new, dt_chem=1e99;
+    double dt, dt_new, dt_chem=1e99, dt_feedback;
     time=t0;
     dt = dt_init;
     // First output
@@ -42,6 +46,8 @@ int mainLoop(){
             dt = dt_new;
         } else if (fmin(dt_new,dt_chem) > 2*dt){
             dt = 2*dt;
+        } else{
+            dt = fmin(dt_new, dt_chem);
         }
         if(dt > dt_max){
             dt = dt_max;
@@ -53,23 +59,44 @@ int mainLoop(){
             printf("error in hydro\n");
             return -1;
         }
-#ifdef useChemistry        
+#ifdef useChemistry 
+        // Check if we want to write dust data
+#ifdef useDust
+        if(istep + 1 >= iostep){
+            outputDust = 1;    
+        } else {
+            outputDust = 0;
+        }
+
+#endif       
         // Chemistry
         ierr = doChemistryStep(dt, &dt_chem);
         if(ierr < 0){
             return -1;
         }
-        if(dt_chem<dt){
-            dt = dt_chem;
-        }
 #endif
-
+        // Feedback
+        ierr = doFeedbackStep(dt, &dt_feedback);
+        if(ierr < 0){
+            return -1;
+        }
+        
         istep = istep + 1;
         time = time+dt;
         if(istep > imax){
             printf("\nMAXIMUM STEPS REACHED\n");
             break;
         }
+#ifdef useChemistry
+        if(dt_chem<dt){
+            dt = dt_chem;
+        }
+
+#endif
+        if(dt_feedback < dt){
+            dt = dt_feedback;
+        }
+
         // produce output
         if(istep >= iostep){
             // set filename

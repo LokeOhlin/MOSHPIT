@@ -1,9 +1,16 @@
 CCOMP = gcc
 #CFLAGS = -DuseChemistry -DuseDust -fbounds-check -O -DNdustBins=256
-CFLAGS =  -fbounds-check -O 
-CFLAGS += -O3
-LIBS = -lm -lgfortran -lquadmath -lstdc++
-CDEPS =
+CFLAGS =  -fbounds-check -Wall
+#CFLAGS += -O3 
+
+HDF5_DIR = /usr/local/hdf5
+
+
+LIBS = -lm -lgfortran -lquadmath -lstdc++ -L$(HDF5_DIR)/lib -lhdf5
+
+INCS = -I$(HDF5_DIR)/include
+
+CDEPS = $(INCS)
 
 FCOMP = gfortran
 #FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 -DDEBUG_EVOLVE
@@ -12,18 +19,17 @@ FDEPS =
 OBJ  = 
 PATHS = 
 
-FLAGS = -g
+FLAGS = -g 
 
 
-FLAGS = 
-#FLAGS += -DuseDust -DNdustBins=256
+#FLAGS += -DuseDust -DNdustBins=60
 #FLAGS += -DTESTATOMONLY
 #FLAGS += -DuseChemistry
 
 CFLAGS += $(FLAGS)
 FFLAGS += $(FLAGS)
 
-VPATH = ../Main:../Init:../c_general/:../IO:../Hydro:../RadChem:../RadChem/Chemistry:../RadChem/Dust:../Runtime
+VPATH = ../Main:../Init:../Constants:../c_general/:../IO:../Hydro:../RadChem:../RadChem/Chemistry:../RadChem/Dust:../Runtime:../MechanicalFeedback
 # Code stuff
 
 # Each directory determines what object it thinks it needs
@@ -38,14 +44,20 @@ CDEPS += -I../Hydro/
 CHEMOBJ = 
 include ../RadChem/Chemistry/Makefile
 FDEPS += -I../RadChem/Chemistry/
+
 include ../RadChem/Makefile
 CDEPS += -I../RadChem/
+
 include ../RadChem/Dust/Makefile
 CDEPS += -I../RadChem/Dust/
 
 IOOBJ   = 
 include ../IO/Makefile
 CDEPS += -I../IO/
+
+FBOBJ   = 
+include ../MechanicalFeedback/Makefile
+CDEPS += -I../MechanicalFeedback/
 
 INITOBJ   = 
 include ../Init/Makefile
@@ -54,6 +66,10 @@ CDEPS += -I../Init/
 RTOBJ   = 
 include ../Runtime/Makefile
 CDEPS += -I../Runtime/
+
+CONSOBJ   = 
+include ../Constants/Makefile
+CDEPS += -I../Constants/
 
 MAINOBJ = 
 include ../Main/Makefile
@@ -65,8 +81,10 @@ OBJ += $(CGENOBJ)
 OBJ += $(MAINOBJ)
 OBJ += $(HYDROBJ)
 OBJ += $(IOOBJ)
+OBJ += $(FBOBJ)
 OBJ += $(RTOBJ)
 OBJ += $(INITOBJ)
+OBJ += $(CONSOBJ)
 CFLAGS += $(CDEPS)
 FFLAGS += $(FDEPS)
 .SUFFIXES: .c .F90 .F .o 

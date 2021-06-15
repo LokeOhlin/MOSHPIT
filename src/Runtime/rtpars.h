@@ -1,6 +1,6 @@
 #ifndef RTPARS
 #define RTPARS
-#include "rtpars.h"
+#include <rtpars.h>
 int checkRuntimePars(char *name, char *value);
 int initRuntimePars();
 int setRuntimePars();
@@ -8,4 +8,5 @@ int setRuntimePars();
 extern double t0;
 extern double tend;
 extern double dt_init, dt_max;
+extern double time;
 extern int imax;

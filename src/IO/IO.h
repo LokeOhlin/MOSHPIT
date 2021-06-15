@@ -1,6 +1,6 @@
 #ifndef IO
 #define IO
-#include "IO.h"
+#include <IO.h>
 int makeOutput(double t, char *outputName);
 
 int setIOPars();

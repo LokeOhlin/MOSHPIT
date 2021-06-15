@@ -1,5 +1,5 @@
 #ifndef MAIN
 #define MAIN
-#include "moshpit.h"
+#include <moshpit.h>
 #endif
 extern double time;
