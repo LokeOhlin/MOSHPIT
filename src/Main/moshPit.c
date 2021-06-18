@@ -17,28 +17,20 @@
 #include <mechanicalFeedback.h>
 #include <moshpit.h>
 
-double time;
+double time, dt;
 
 int mainLoop(){
     int istep = 0, io=0, iostep=0, ierr;
     char fname[8] = "output_", outputName[12]="", fnum[5]="";
-    double dt, dt_new, dt_chem=1e99, dt_feedback;
+    double dt_new, dt_chem=1e99, dt_feedback;
     time=t0;
     dt = dt_init;
     // First output
-    strcpy(outputName, "");
-    sprintf(fnum, "%04d", io);
-    strcat(outputName, fname);
-    strcat(outputName, fnum);
-    
-    printf("Writing ");
-    printf("%s",outputName);
-    printf("\n");
-    
-    ierr = makeOutput(t0, outputName);
+    ierr = createOutputFile(io);
+    ierr = finalizeOutputFile();
+    io = io + 1;
     iostep = iostep + nstepOut;
-    io = io + 1 ;
-    printf("\n %d  %d\n", iostep, nstepOut);
+    
     while( time < tend ){
         // check timestep
         ierr = getCFL(&dt_new);
@@ -53,6 +45,12 @@ int mainLoop(){
             dt = dt_max;
         }
         printf("step %d time = %.4e dt = %.4e || dt_CFL = %.4e  dt_chem= %.4e\n", istep, time ,dt, dt_new,dt_chem);
+        // check if we are outputing on this step
+        if(istep + 1 >= iostep){
+            // we create file here since some modules (dust) does not store much of the data, so must therefore write during the step
+            ierr = createOutputFile(io);
+        }
+        
         //Hydro
         ierr = doHydroStep(dt);
         if(ierr < 0){
@@ -97,38 +95,16 @@ int mainLoop(){
             dt = dt_feedback;
         }
 
-        // produce output
+        // finalize the output
         if(istep >= iostep){
-            // set filename
-            strcpy(outputName, "");
-            sprintf(fnum, "%04d", io);
-            strcat(outputName, fname);
-            strcat(outputName, fnum );
-    
-            printf("Writing ");
-            printf("%s ", outputName);
-            printf("\n");
-    
-            ierr = makeOutput(time, outputName);
-            if(ierr < 0){
-                return -1;
-            }
+            ierr = finalizeOutputFile();
             iostep = iostep + nstepOut;
             io = io + 1;
         }
     }
     // final output
-    strcpy(outputName, "");
-    sprintf(fnum, "%04d", io);
-    strcat(outputName, fname);
-    strcat(outputName, fnum );
-    
-    printf("Writing ");
-    printf("%s",outputName);
-    printf("\n");
-    
-    ierr = makeOutput(time, outputName);
-    iostep = iostep + nstepOut;
+    ierr = createOutputFile(io);
+    ierr = finalizeOutputFile();
     io = io + 1;
     return -1;
 }

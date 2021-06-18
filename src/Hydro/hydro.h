@@ -1,3 +1,4 @@
+#include <cgeneral.h>
 #ifndef HYDRO
 #define HYDRO
 #include <hydro.h>
@@ -59,4 +60,12 @@ extern double *rs;
 extern double *vol;
 extern double *dr;
 
+extern double *varBuff;
+int Hydro_initIO();
+int Hydro_output();
 #endif
+
+int nrealHydroPars, nintHydroPars;
+int_list_t *hydroIPars;
+real_list_t *hydroDPars;
+

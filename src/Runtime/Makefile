@@ -1,2 +1,2 @@
-RTOBJ += RuntimeParsInit.o
+RTOBJ += RuntimeParsInit.o RuntimeParsOutput.o
 

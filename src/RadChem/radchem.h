@@ -1,3 +1,4 @@
+#include <cgeneral.h>
 #ifndef radchem
 #define radchem
 #include <radchem.h>
@@ -14,6 +15,9 @@ void getintegerchemistrypar(char *name, int *value);
 
 void setFromStellarModel();
 void setFromFile();
+
+int RadChem_initIO();
+int RadChem_output();
 #endif
 extern double abar, mf_scale, abundHe, abundC, abundO, abundSi, ch_mH, ch_kb, ch_muC;
 extern int useRadiationPressure;
@@ -27,3 +31,11 @@ extern double radEmin;
 extern double radEmax;
 extern double dissE, ionE, ionEH2, sigmaLW, sion, sigma0, sigmaH0;
 extern double *sionH, *sionH2, *EionH, *EionH2, *EbinEdges, *Nphots, *aveEphots;
+#ifndef useDust
+extern double *dustTau_perH;
+#endif
+
+extern int nintChemPars, nrealChemPars;
+extern int_list_t *chemIPars;
+extern real_list_t *chemDPars;
+extern double *chemBuff;

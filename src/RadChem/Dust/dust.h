@@ -1,3 +1,4 @@
+#include <cgeneral.h>
 #include <hdf5.h>
 #ifndef dust
 #define dust
@@ -50,8 +51,9 @@ double get_dadt_sputtering(double agrain, int ibin, int iabin, int graphite, dou
 int set_dadt(double *rpars);
 
 
-int outputDustCell(int icell, double dr);
-int initDustOutput(double dt);
+int Dust_initIO();
+int Dust_outputCell(int icell, double dr);
+int Dust_output();
 #endif
 // Scratch arrays
 extern double *dadt, *number, *slope, *Mnew, *Nnew, *Snew;
@@ -94,3 +96,8 @@ extern int dust_upperBound_pileUp;
 extern hid_t dustOutput;
 extern int outputDust;
 extern int outputNum;
+
+extern int nrealDustPars, nintDustPars;
+extern real_list_t *dustDPars;
+extern int nintDustPars;
+extern int_list_t *dustIPars;

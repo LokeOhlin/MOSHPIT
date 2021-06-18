@@ -50,6 +50,7 @@ double *pstate = NULL;
 double *rs = NULL;
 double *vol = NULL;
 double *dr = NULL ;
+double *varBuff = NULL;
 
 int useHydro; 
 
@@ -139,9 +140,13 @@ int initHydro(){
     // Grid parameters
     getintegerhydropar("ncells", &NCELLS);
     getintegerhydropar("nghost", &NGHOST);
+    
+    //buffer used in outputs
+    varBuff = (double *) malloc(NCELLS*sizeof(double));
+    
     // add ghost cells to total
     NCELLS = NCELLS + 2*NGHOST;
-    NINTER = NCELLS - 3;
+    NINTER = NCELLS - 2*NGHOST + 1;
 
     // General hydro stuff
     getrealhydropar("gamma", &adi);

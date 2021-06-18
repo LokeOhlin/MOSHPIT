@@ -1,2 +1,2 @@
-FBOBJ += feedbackInit.o feedbackMethods.o
+FBOBJ += feedbackInit.o feedbackMethods.o feedbackOutput.o
 

@@ -11,9 +11,11 @@
     #include <dust.h>
 #endif
 
-int nrealPars = 26;
+double *chemBuff = NULL;
+
+int nrealChemPars = 26;
 real_list_t *chemDPars = NULL;
-int nintPars = 14;
+int nintChemPars = 14;
 int_list_t *chemIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
@@ -31,8 +33,8 @@ double ch_kb   = 1.38065e-16;
 // set default parameter lists 
 int setChemistryPars(){
     // Allocate spaces
-    chemDPars = (real_list_t *) malloc(nrealPars * sizeof(real_list_t));
-    chemIPars = (int_list_t *) malloc(nintPars * sizeof(int_list_t));
+    chemDPars = (real_list_t *) malloc(nrealChemPars * sizeof(real_list_t));
+    chemIPars = (int_list_t *) malloc(nintChemPars * sizeof(int_list_t));
 
     // Real/Double parameters
     strcpy(chemDPars[0].name, "ch_deff");                  chemDPars[0].value = 1.0; 
@@ -84,14 +86,14 @@ int checkChemistryPars(char *name, char *value){
     // Method to see if parameter matches any of the defined chemistry parameters
     int ipar;
     // Check reals
-    for(ipar = 0; ipar < nrealPars; ipar ++){
+    for(ipar = 0; ipar < nrealChemPars; ipar ++){
         if(compStr(name, chemDPars[ipar].name, 80) > 0){
             chemDPars[ipar].value = atof(value);
             return 1;
         }
     }
 
-    for(ipar = 0; ipar < nintPars; ipar ++){
+    for(ipar = 0; ipar < nintChemPars; ipar ++){
         if(compStr(name, chemIPars[ipar].name, 80) > 0){
             chemIPars[ipar].value = atoi(value);
             return 1;
@@ -103,7 +105,7 @@ int checkChemistryPars(char *name, char *value){
 // Method to get value of a double(real) parameter
 void getrealchemistrypar(char *name, double *value){
     int ipar;
-    for(ipar = 0; ipar < nrealPars; ipar ++){
+    for(ipar = 0; ipar < nrealChemPars; ipar ++){
         if(compStr(name, chemDPars[ipar].name, 80) > 0){
             *value = chemDPars[ipar].value;
             return;
@@ -116,7 +118,7 @@ void getrealchemistrypar(char *name, double *value){
 // Method to get value of an integer parameter
 void getintegerchemistrypar(char *name, int *value){
     int ipar;
-    for(ipar = 0; ipar < nintPars; ipar ++){
+    for(ipar = 0; ipar < nintChemPars; ipar ++){
         if(compStr(name, chemIPars[ipar].name, 80) > 0){
             *value = chemIPars[ipar].value;
             return;
@@ -133,6 +135,9 @@ int initChemistry(){
     
     abar = 1.0 + abundHe*ch_muHe + abundC*ch_muC + abundO*ch_muO + abundSi*ch_muSi ;
     mf_scale = 1.0 + abundC*ch_muC;
+    
+    // initialize buffer array for output
+    chemBuff = (double *) malloc( (NCELLS - 2*NGHOST)*5 * sizeof(double)); 
     
     //Call intit for fortran functions
     Chemistry_FortranInit();

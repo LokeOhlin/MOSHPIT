@@ -1,2 +1,2 @@
-HYDROBJ += hydroInit.o hydroMethods.o
+HYDROBJ += hydroInit.o hydroMethods.o hydroOutput.o
 

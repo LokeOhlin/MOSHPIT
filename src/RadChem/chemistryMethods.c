@@ -37,11 +37,7 @@ int doChemistryStep(double dt, double *dt_chem){
     getrealchemistrypar("ch_max_ion_frac_change", &maxIon_Change);
     // If we want radiation 
     setRadiationData(radData, dt);
-#ifdef useDust
-    if(outputDust){
-        ierr = initDustOutput(dt);
-    }
-#endif
+    
     dt_chem[0] = 1e99;
     sum_abs = 0;
     sum_abs_est = 0;
@@ -98,7 +94,7 @@ int doChemistryStep(double dt, double *dt_chem){
 #ifdef useDust
         ierr = dustCell(rpars, ipars, dt);
         if(outputDust){
-            ierr = outputDustCell(icell, dr[icell]);
+            ierr = Dust_outputCell(icell, dr[icell]);
         }
         ierr = getBinsCell(icell, &rhoDustNew);
 #endif
@@ -194,12 +190,6 @@ int doChemistryStep(double dt, double *dt_chem){
         ustate[idx+ICHEM_START+3] = rho*non_eq_species[2]*ch_muC/mf_scale;
         ustate[idx+ICHEM_START+4] = rho*(abundC - non_eq_species[2])*ch_muC/mf_scale;
     }
-
-#ifdef useDust
-    if(outputDust){
-        ierr = finalizeDustOutput();
-    }
-#endif 
 
     return 1;
 }
