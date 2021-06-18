@@ -7,6 +7,43 @@
 #include <radchem.h>
 #include <constantsAndUnits.h>
 
+#ifndef useDust
+#include <cgeneral.h>
+#include <constantDust.h>
+
+double getTauDustConstant(double ELbin, double ERbin){
+    int ifbin, ifbinp;
+    double freqmin = ELbin*planckInv;
+    double freqmax = ERbin*planckInv;
+    double freq, freqp, leftEdge, rightEdge;
+
+    ifbin = binarySearch(freqmin, MNR_abs_freqs, MNR_abs_Nfbins);
+    ifbinp = ifbin + 1;
+    double intTau;
+    double totFreq;
+    double delf, delTau, tau, taup;
+    while(1) {
+        freq  = MNR_abs_freqs [ifbin];
+        freqp = MNR_abs_freqs [ifbinp];
+        tau   = MNR_abs_tauTot[ifbin]; 
+        taup  = MNR_abs_tauTot[ifbinp];
+
+        leftEdge  = fmin(freq, freqmin);
+        rightEdge = fmax(freqp, freqmax);
+        delf = rightEdge - leftEdge;
+        totFreq += delf;
+
+        delTau = taup - tau;
+        intTau += tau*(rightEdge - leftEdge) + delTau/delf * (rightEdge*(0.5*rightEdge - freq) - leftEdge*(0.5*leftEdge - freq));
+        if(freqp >= freqmax){
+            break;
+        }
+    }
+    return intTau/totFreq;
+}
+#endif
+
+
 //Piecewise H2 cross section
 //{0, 0 <= nu <= 15.2}, {0.09*Mb, 15.2 < nu <= 15.45}, 
 //{1.15*Mb, 15.45 < nu <= 15.7}, {3.00*Mb, 15.7 < nu <= 15.95}, 
@@ -70,6 +107,10 @@ void setFromStellarModel(){
     Eion  = Eion - ionE;
     EionH [0] = Eion;
     EionH2[0] = Eion;
+    
+#ifndef useDust
+    dustTau_perH[iE136] = getTauDustConstant(ionE, ionEH2);
+#endif
 
     //11.2 - 13.6
     getemissionsigma_(&Teff, &dissE, &ionE, &tmp, &Edis, &Ndis0);
@@ -77,6 +118,10 @@ void setFromStellarModel(){
 
     Nphots[iE112]    = Ndis0;
     aveEphots[iE112] = Edis; 
+    
+#ifndef useDust
+    dustTau_perH[iE112] = getTauDustConstant(dissE, ionE);
+#endif
 
     // 15.2 to Emax
     for(iEbin = 0; iEbin < numBinsFullIon; iEbin++){
@@ -92,6 +137,10 @@ void setFromStellarModel(){
         directh2_(&Teff, &EbinEdges[iEbin + iE152], &EbinEdges[iEbin + 1 + iE152], &Eion, &sion);
         sionH2[iEbin+1] = sion*4.0*M_PI*RstarSQ/NionH20;
         EionH2[iEbin+1] = Eion - ionEH2;
+        
+#ifndef useDust
+        dustTau_perH[iEbin+iE152] = getTauDustConstant(EbinEdges[iEbin + iE152], EbinEdges[iEbin + iE152 + 1]);
+#endif
     } 
 
     //5.6 -11.2
@@ -99,6 +148,9 @@ void setFromStellarModel(){
         getemissionsigma_(&Teff, &EbinEdges[iEbin], &EbinEdges[iEbin+1], &tmp, &Edis, &Npeh0);
         Nphots[iEbin] = Npeh0*4.0*M_PI*RstarSQ;
         aveEphots[iEbin] = Edis;
+#ifndef useDust
+        dustTau_perH[iEbin] = getTauDustConstant(EbinEdges[iEbin], EbinEdges[iEbin + 1]);
+#endif
     }
 }
 
@@ -152,6 +204,9 @@ void setFromFile(){
             }
 
         }
+#ifndef useDust
+        dustTau_perH[iEbin] = getTauDustConstant(EbinEdges[iEbin], EbinEdges[iEbin + 1]);
+#endif
         iEbin++;
     }
     if(nFileBins != numRadiationBins){

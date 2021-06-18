@@ -49,6 +49,11 @@ double sigmaLW = 2.46e-18;
 double *sionH;
 double *sionH2;
 
+#ifndef useDust
+double *dustTau_perH;
+#endif
+
+
 void initRadiation(){
     int iEbin, readSEDFromFile, ierr;
     double delE;
@@ -102,7 +107,9 @@ void initRadiation(){
     sionH2 = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
 #ifdef useDust
     // init local dust arrays for radiation SED and dust absorption
-        ierr = initDustRadiation(numRadiationBins, EbinEdges);
+    ierr = initDustRadiation(numRadiationBins, EbinEdges);
+#else
+    dustTau_perH = (double * ) malloc(numRadiationBins * sizeof(double));
 #endif 
 
     if(readSEDFromFile){
@@ -175,7 +182,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     H2colm = H2colmOld + numdr*xH2;
 
 #ifndef useDust
-    dAv = AV_conversion_factor*numdr*(2.0*xH2+xH+xHp);//*exp(-Temp/Temp_lim);
+    dAv = numdr*(2.0*xH2+xH+xHp)*exp(-Temp/Temp_lim);
     Av = AvOld + dAv;
 #endif
 
@@ -195,7 +202,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         DtauD = getDustOpticalDepth(iEbin, dr); 
 #else
         //TODO: change dustAtt to array with dust size averaged cross sections.
-        DtauD    = dustAtt5 * dAv   * dust_to_gas_ratio; 
+        DtauD    = dustTau_perH[iEbin] * dAv   * dust_to_gas_ratio; 
 #endif 
         if(DtauD > 1e-11){
             dNdust = nphots * (1 - exp(-DtauD));
@@ -243,9 +250,9 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         taud11Out = AvOld + DtauD; 
         Av = taud11Out;
 #else
-        taud11In  = dustAtt11 * AvOld * dust_to_gas_ratio; 
-        taud11Out = dustAtt11 * Av    * dust_to_gas_ratio; 
-        DtauD     = dustAtt11 * dAv   * dust_to_gas_ratio; 
+        taud11In  = dustTau_perH[iE112] * AvOld * dust_to_gas_ratio; 
+        taud11Out = dustTau_perH[iE112] * Av    * dust_to_gas_ratio; 
+        DtauD     = dustTau_perH[iE112] * dAv   * dust_to_gas_ratio; 
 #endif 
     
         // Photons absorbed by H2 and dust, calculate in and out attenuation for both
@@ -326,7 +333,7 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
 #ifdef useDust
         DtauD = getDustOpticalDepth(iEbin, dr); 
 #else
-        DtauD = dustAtt13 * dAv * dust_to_gas_ratio; 
+        DtauD = dustTau_perH[iEbin] * dAv * dust_to_gas_ratio; 
 #endif
         tauTot = DtauH + DtauH2 + DtauD;
         if(tauTot == 0.0){
