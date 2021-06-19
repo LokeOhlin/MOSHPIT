@@ -11,17 +11,15 @@ INCS = -I$(HDF5_DIR)/include
 CDEPS = $(INCS)
 
 FCOMP = gfortran
-FFLAGS = -DCHEMISTRYNETWORK=5 -fdefault-real-8 -std=legacy 
+FFLAGS = -fdefault-real-8 -std=legacy 
 FDEPS =
 OBJ  = 
 PATHS = 
 
 FLAGS = -g 
 
-
-#FLAGS += -DuseDust -DNdustBins=60
-#FLAGS += -DTESTATOMONLY
-FLAGS += -DuseChemistry
+# Flags and variables for wanted compilation
+include ./Config
 
 CFLAGS += $(FLAGS)
 FFLAGS += $(FLAGS)
@@ -92,6 +90,6 @@ FFLAGS += $(FDEPS)
 %.o: %.c
 	$(CCOMP) -c -o $@ $< $(FLAGS) $(CFLAGS)
 moshpit: $(OBJ)
-	$(CCOMP) -o $@ $^ $(FLAGS) $(CFLAGS) $(LIBS) $(FFLAGS)
+	$(CCOMP) -o $@ $^ $(FLAGS) $(CFLAGS) $(LIBS) 
 clean :
 	rm -f $(OBJPATH)*.o

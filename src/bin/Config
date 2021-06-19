@@ -1,0 +1,23 @@
+# Dust model parameters
+#
+
+# overaching flag
+FLAGS += -DuseDust
+# total number of dust bins to be distributed across dust species 
+FLAGS += -DNdustBins=60
+
+
+# Chemistry parameters
+#
+
+# overarching flag
+FLAGS += -DuseChemistry
+
+#simplified network for only using atomic hydrogen
+#FLAGS += -DTESTATOMONLY
+
+#change used values and function to match PDR tests
+#FLAGS += -DPDRtestChem 
+
+#Fortran FLAGS
+FFLAGS += -DCHEMISTRYNETWORK=5
