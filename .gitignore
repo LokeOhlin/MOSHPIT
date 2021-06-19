@@ -51,5 +51,6 @@ Thumbs.db
 # Object files
 *.o
 *.mod
-
+bin/
+mostpit
 
