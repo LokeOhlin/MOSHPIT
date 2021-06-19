@@ -3,8 +3,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <math.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <dustRadiation.h>
 #include <cgeneral.h>
 double *Qabs_g_tab_Qabs = NULL;

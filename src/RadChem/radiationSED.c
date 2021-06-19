@@ -84,8 +84,7 @@ void setFromStellarModel(){
     double Edis, Eion, sion, sigma0_e;
     double Npeh0, Ndis0, Nion0, NionH20;
     double Teff, Lstar, RstarSQ;
-    double inf = -1.0;
-    double tmp = 1.0, tmp2;
+    double tmp = 1.0;
     int iEbin;
     
     getrealchemistrypar("Tstar", &Teff);
@@ -162,7 +161,6 @@ void setFromFile(){
     int nFileBins, iEbin;
     char *numphots_s, *eave_s;
     double numphots, eave;
-    int ichar, endchar;
     iEbin = 0;
     nFileBins = 0;
 

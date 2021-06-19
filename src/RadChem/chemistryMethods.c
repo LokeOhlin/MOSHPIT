@@ -15,7 +15,7 @@
 
 int doChemistryStep(double dt, double *dt_chem){
     int ierr;
-    int icell, idx, iradBin;
+    int icell, idx;
     double radData[2*numRadiationBins + 3];
     double absData[12];
     double abhtot, abctot;
@@ -85,7 +85,14 @@ int doChemistryStep(double dt, double *dt_chem){
         // Set cell data in dust arrays
         // Needs to be done before radiative transfer
         ierr = setBinsCell(icell, &rhoDust);
+        if(ierr < 0) {
+            return -1; 
+        }
+
         ierr = setRadiationBins(radData, dt, 1/(4*M_PI*pow((rs[icell]),2)));
+        if(ierr < 0) {
+            return -1; 
+        }
 #endif
         // calculate cell absorption
         
@@ -93,10 +100,19 @@ int doChemistryStep(double dt, double *dt_chem){
 
 #ifdef useDust
         ierr = dustCell(rpars, ipars, dt);
+        if(ierr < 0) {
+            return -1; 
+        }
         if(outputDust){
             ierr = Dust_outputCell(icell, dr[icell]);
+            if(ierr < 0) {
+                return -1; 
+            }
         }
         ierr = getBinsCell(icell, &rhoDustNew);
+        if(ierr < 0) {
+            return -1; 
+        }
 #endif
 
         //exit(0);

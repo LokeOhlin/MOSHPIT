@@ -2,9 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <tgmath.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <dustRadiation.h>
 #include <cgeneral.h>
 #include <dust.h>
@@ -182,13 +179,12 @@ int getTemperatureDist(int ibin, int iabin, int graphite, double Tmax){
     // and Emin is set such that the cooling and heating from frequent low energy photons,
     // eg. the processes we consider to be continous, is in equilibrium
     int iUbin, fUbin, fUbinp, jUbin, idx, idxp, imatr, imatrp;
-    double AiiSum, freq_if, E_inf, Qabs, radEdens;
+    double AiiSum, E_inf;
     double Uf, dUf, UfR, UfL;
     double agrain = abin_c[iabin];
     double volgrain = volgrains[iabin];
     double Natom = Natoms[ibin];
     double piaa = pi_asquare[iabin];
-    int ida_Qabs = ida_tabQabs[ibin];
     int ida_Qem = ida_tabQem[ibin];
     
     
@@ -447,4 +443,5 @@ double get_dadt_sublimation(int ibin, int iabin, int graphite){
     //}
     return dadt_sub;
 }
+
 #endif

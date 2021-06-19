@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <dustRadiation.h>
 #include <cgeneral.h>
 #include <dust.h>
@@ -98,7 +96,6 @@ int setRadiationBins(double *radData, double dt, double geoFact){
 
 double getDustOpticalDepth(int iEbin, double dr){
     double tauDustTot=0;
-    double numDust;
     if(dust_useRadiation == 0) return 0.0;
     int ibin, idx, graphite, iabin;
     for(idx = 0; idx < NdustBins; idx++){
@@ -116,7 +113,6 @@ double getDustOpticalDepth(int iEbin, double dr){
 
 int setDustOpticalDepthArray(double dr){
     // only used for outputs
-    double numDust;
     int iphotBin;
     int ibin, idx, graphite, iabin, idq, idq2;
     for(idx = 0; idx < NdustBins; idx++){
@@ -139,12 +135,11 @@ int setDustOpticalDepthArray(double dr){
 //loop over all photon bins and sum up absorbed energy
 double getAbsorption(int ibin, int graphite){
      int iphotBin, iabin;
-     double aveNu, aveEphot, Qabs, EabsNu, EabsTot;
+     double aveEphot, Qabs, EabsNu, EabsTot;
      EabsTot = 0;
      for (iphotBin = 0; iphotBin < nphotBins; iphotBin++){
           // average photon energy in bin
           aveEphot = dust_Ephots[iphotBin];
-          aveNu = aveEphot*planckInv;
           
           Qabs = QabsBin[ibin*nphotBins + iphotBin]; //getQabs(abin_c[ibin], aveNu, graphite, ida_tabQabs[ibin], -1);
           EabsNu = dust_Nphots[iphotBin] * aveEphot * Qabs;
@@ -162,13 +157,13 @@ double getAbsorption(int ibin, int graphite){
 //loop over all photon bins and sum up absorbed energy from all within specified range
 double getAbsorption_range(int ibin, int graphite, double nuMin, double nuMax){
      int iphotBin, firstBin, iabin;
-     double aveNu, aveEphot, Qabs, EabsNu, EabsTot;
+     double aveEphot, Qabs, EabsNu, EabsTot;
      double Emax = nuMax*planck;
      double Emin = nuMin*planck;
      double leftEdge, rightEdge;
      EabsTot = 0;
      firstBin = binarySearch(Emin, dust_ELphots, nphotBins);
-     for (iphotBin = 0; iphotBin < nphotBins; iphotBin++){
+     for (iphotBin = firstBin; iphotBin < nphotBins; iphotBin++){
          if(dust_ERphots[iphotBin] < Emin){
               continue; // Ebins from lowest to highest
           }
@@ -197,7 +192,7 @@ double getAbsorption_range(int ibin, int graphite, double nuMin, double nuMax){
 //same but only number of photons
 double getAbsorptionNum_range(int ibin, int graphite, double Emin, double Emax){
      int iphotBin, firstBin, iabin;
-     double aveNu, aveEphot, Qabs, NabsNu, NabsTot;
+     double NabsNu, NabsTot;
      double leftEdge, rightEdge;
      if(EbinMax < Emin){
          return 0;
@@ -231,10 +226,8 @@ double getAbsorptionNum_range(int ibin, int graphite, double Emin, double Emax){
 // Method to get energy density of photons of frequency freq (u_\nu)
 double getRadEdens(double freq){
     int iphotBin;
-    double aveNu, aveEphot, EabsNu, EabsTot;
     // Energy of desired photons
     double Ener = freq*planck;
-    EabsTot = 0;
     if(Ener > dust_ERphots[nphotBins - 1]){
        return 0;
     }
@@ -250,7 +243,7 @@ double getRadEdens(double freq){
 //loop over all photon bins and calculate transition from one dust energy bin to another
 double getUpwardTransition(int ibin, int graphite, double Ui, double UiL, double UiR, double dUi, double Uf, double UfL, double UfR, double dUf, double continousBound){
     int iphotBin, firstBin, idx, iabin;
-    double aveNu, aveEphot, Qabs, NabsE, EabsTot;
+    double NabsE;
     double leftEdge, rightEdge, ER, EL;
     double finiteWidthFactor;
     double Emin = UfL - UiR;
@@ -333,7 +326,7 @@ double getUpwardTransition(int ibin, int graphite, double Ui, double UiL, double
 
 double intrabinUpwardTransition(int ibin, int graphite, double dUi, double Ui, double Uf){
     int iphotBin, iabin;
-    double aveNu, aveEphot, Qabs, EabsNu, EabsTot;
+    double EabsNu;
     double leftEdge, rightEdge;
     double dUiInv = 1/dUi; 
     double uppRate = 0;

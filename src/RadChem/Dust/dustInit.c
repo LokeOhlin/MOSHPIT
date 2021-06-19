@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <hydro.h>
 #include <radchem.h>
 #include <cgeneral.h>
@@ -177,7 +175,7 @@ void getintegerdustpar(char *name, int *value){
 
 
 int initDustPowerLaw(){
-    int ierr, ibin, iabin;
+    int ibin, iabin;
     double cmax, cmin, smax, smin, plaw;
     double snorm, cnorm;
     double amin_bin, amax_bin;
@@ -405,6 +403,9 @@ int initDust(){
     printf("INITDIST %d", initDist);
     if(initDist == 0){
         ierr = initDustPowerLaw();
+        if(ierr < 0) {
+            return -1;
+        }
     }
 
     // get parameters for dust growth
@@ -425,6 +426,10 @@ int initDust(){
         
         // allocate  
         ierr = loadDustRadiationTables();
+        if(ierr < 0) {
+            return -1;
+        }
+        
         ida_tabQabs  = (int *) malloc(dust_nbins*sizeof(int));
         ida_tabQem   = (int *) malloc(dust_nbins*sizeof(int));
         for(ibin = 0; ibin < dust_nbins; ibin++){
@@ -453,6 +458,9 @@ int initDust(){
     
     if(dust_useSputtering){
         ierr = loadDustSputteringTables();
+        if(ierr < 0) {
+            return -1;
+        }
         ida_tabSput   = (int *) malloc(dust_nbins*sizeof(int));
         for(idx = 0; idx < NdustBins; idx++){
             ibin = globalToLocalIndex(idx);

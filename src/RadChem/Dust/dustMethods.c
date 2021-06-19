@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <dust.h>
 #include <hydro.h>
 #include <radchem.h>
@@ -191,10 +189,15 @@ int rebinn(double dt){
                 Sn  = Snew[dust_nbins-2];
                 // get updated bin values
                 ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
-
+                if(ierr < 0) {
+                    return -1;
+                }
                 // Update the bins (and limit slope)
                 Mnew[dust_nbins-2] = Mn + Mnp;        
                 ierr = limitSlope(&Nnew[dust_nbins-2], &Snew[dust_nbins-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
+                if(ierr < 0) {
+                    return -1;
+                }
             }
             Mnew[dust_nbins-1] = 0;      
             Nnew[dust_nbins-1] = 0;      
@@ -213,10 +216,16 @@ int rebinn(double dt){
                 Sn  = Snew[isilicone+1];
                 // get updated bin values
                 ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
+                if(ierr < 0) {
+                    return -1;
+                }
 
                 // Update the bins (and limit slope)
                 Mnew[isilicone+1] = Mn + Mnm;        
                 ierr = limitSlope(&Nnew[isilicone+1], &Snew[isilicone+1], Nntilde, Sntilde, Mn+Mnm, 1); 
+                if(ierr < 0) {
+                    return -1;
+                }
             } 
             
             Mnew[isilicone] = 0;      
@@ -239,10 +248,16 @@ int rebinn(double dt){
                 Sn  = Snew[isilicone-2];
                 
                 ierr = rebinn_upper(Nn, Nnp, Sn, Mn, Mnp, &Nntilde, &Sntilde);
+                if(ierr < 0) {
+                    return -1;
+                }
             
                  // Update the bins
                 Mnew[isilicone-2] = Mn + Mnp;
                 ierr = limitSlope(&Nnew[isilicone-2], &Snew[isilicone-2], Nntilde, Sntilde, Mn+Mnp, Nabins-2); 
+                if(ierr < 0) {
+                    return -1;
+                }
             }
             Mnew[isilicone-1] = 0;      
             Nnew[isilicone-1] = 0;      
@@ -259,9 +274,15 @@ int rebinn(double dt){
                 Sn  = Snew[1];
                 // get updated bin values
                 ierr = rebinn_lower(Nn, Nnm, Sn, Mn, Mnm, &Nntilde, &Sntilde);
+                if(ierr < 0) {
+                    return -1;
+                }
                 // Update the bins (and limit slope)
                 Mnew[1] = Mn + Mnm;        
                 ierr = limitSlope(&Nnew[1], &Snew[1], Nntilde, Sntilde, Mn+Mnm, 1); 
+                if(ierr < 0) {
+                    return -1;
+                }
             }
             Mnew[0] = 0;      
             Nnew[0] = 0;      

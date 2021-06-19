@@ -21,7 +21,6 @@ double time, dt;
 
 int mainLoop(){
     int istep = 0, io=0, iostep=0, ierr;
-    char fname[8] = "output_", outputName[12]="", fnum[5]="";
     double dt_new, dt_chem=1e99, dt_feedback;
     time=t0;
     dt = dt_init;

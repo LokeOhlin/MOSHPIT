@@ -55,7 +55,7 @@ double *dustTau_perH;
 
 
 void initRadiation(){
-    int iEbin, readSEDFromFile, ierr;
+    int iEbin, readSEDFromFile;
     double delE;
     
     getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
@@ -107,7 +107,10 @@ void initRadiation(){
     sionH2 = (double * ) malloc((numBinsFullIon + 1) * sizeof(double));
 #ifdef useDust
     // init local dust arrays for radiation SED and dust absorption
-    ierr = initDustRadiation(numRadiationBins, EbinEdges);
+    int ierr = initDustRadiation(numRadiationBins, EbinEdges);
+    if(ierr < 0){
+        printf("Error when initialising dust radiation bins\n");
+    }
 #else
     dustTau_perH = (double * ) malloc(numRadiationBins * sizeof(double));
 #endif 
@@ -134,20 +137,23 @@ void setRadiationData(double *radData, double dt){
 
 
 void cellAbsorption(double *radData, double *specData, double numd, double Temp, double dr, double volcell, double dt, double *absData){
-    int iEbin, allDone;
+    int iEbin;
     // Radiation specific variables
-    double Npeh, Ndis, Nion, NionH2, Edis, Eion, EionH, EionH2, nphots, ephots;
+    double Ndis, Edis, nphots, ephots;
     // Species data
     double numdr, xH, xH2, xHp;
     // Column densities
-    double Hcolm, HcolmOld, H2colm, H2colmOld, Av, AvOld, dAv, normH2, normH2Old;
+    double Hcolm, HcolmOld, H2colm, H2colmOld, Av, AvOld, normH2, normH2Old;
+#ifndef useDust
+    double dAv;
+#endif
     // Optical depths
     double taud11In, taud11Out, DtauH, DtauH2, DtauD, tauTot;
     // Attenuation from dust and shielding from H2 in 5.2-13.6 bins
     double eAttavg, eAttd11_avg, eDAttd11_avg, fshieldIn, fshield_avg, fabs_in, Ndis_in, dNH211, dNdust11;
     double DNionH, DNionH2, DNdust, NabsTot, dNdust;
     // Rates and associated energies
-    double kUV, kion, phih, hvphih, kdis, phih2, hvphih2, dEdust, EtotPe;
+    double kUV, kion, phih, hvphih, kdis, phih2, hvphih2, EtotPe;
     // Momentum injection
     double DustMom, H2Mom, HMom, DustEabs, Habs_est, H2abs_est;
     // Ugly
@@ -195,7 +201,6 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         if(nphots <= 0){
             continue;
         }
-        allDone = 0;
         ephots = radData[iEbin + numRadiationBins];
 #ifdef useDust
     // Calculate the total optical depth from dust of these photons and how much they absorb
@@ -239,7 +244,6 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
 
     nphots = radData[iE112];
     if(nphots > 0){
-        allDone = 0;
         Ndis      = Nphots[iE112];
         Edis      = radData[iE112+numRadiationBins];
      
@@ -326,7 +330,6 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
             continue;
         }
         ephots = radData[iEbin + numRadiationBins];
-        allDone = 0;
         // Calculate optical depths 
         DtauH  = numdr * sionH [iEbin - iE136] * xH;
         DtauH2 = numdr * sionH2[iEbin - iE136] * xH2;
