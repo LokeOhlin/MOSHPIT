@@ -7,17 +7,20 @@
 #include <IO.h>
 #include <cgeneral.h>
 
-int nrealIOPars = 0;
+int nrealIOPars = 1;
 real_list_t *IODPars = NULL;
 int nintIOPars = 1;
 int_list_t *IOIPars = NULL;
 
 int nstepOut;
-
+double dtOut;
 // set default parameters
 int setIOPars(){
     IOIPars = (int_list_t * )malloc(nintIOPars * sizeof(int_list_t));
+    IODPars = (real_list_t * )malloc(nrealIOPars * sizeof(real_list_t));
     strcpy(IOIPars[0].name, "nstepOut"); IOIPars[0].value = 10;
+    
+    strcpy(IODPars[0].name, "dtOut"); IODPars[0].value = 0.1;
     return 1;
 }
 
@@ -65,6 +68,7 @@ void getintegeriopar(char *name, int *value){
 // gets global parameters
 int initIO(){
     getintegeriopar("nstepOut", &nstepOut);
+    getrealiopar("dtOut", &dtOut);
     return 1;
 }
 

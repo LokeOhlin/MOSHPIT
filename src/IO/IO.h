@@ -17,4 +17,5 @@ int my_writeToDataset(char *datasetName, double *varArr, int rank, hsize_t *star
 int my_writeAttribute(const char *groupName, const char *name, const void *buff, hid_t type);
 #endif
 extern int nstepOut;
+extern double dtOut;
 extern hid_t h5Output;

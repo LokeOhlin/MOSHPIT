@@ -21,7 +21,7 @@ double time, dt;
 
 int mainLoop(){
     int istep = 0, io=0, iostep=0, ierr;
-    double dt_new, dt_chem=1e99, dt_feedback;
+    double dt_new, dt_chem=1e99, dt_feedback, ioTime=0.0;
     time=t0;
     dt = dt_init;
     // First output
@@ -29,7 +29,8 @@ int mainLoop(){
     ierr = finalizeOutputFile();
     io = io + 1;
     iostep = iostep + nstepOut;
-    
+    ioTime = ioTime + dtOut;
+
     while( time < tend ){
         // check timestep
         ierr = getCFL(&dt_new);
@@ -45,7 +46,7 @@ int mainLoop(){
         }
         printf("step %d time = %.4e dt = %.4e || dt_CFL = %.4e  dt_chem= %.4e\n", istep, time ,dt, dt_new,dt_chem);
         // check if we are outputing on this step
-        if(istep + 1 >= iostep){
+        if((istep + 1 >= iostep) || (time + dt > ioTime)){
             // we create file here since some modules (dust) does not store much of the data, so must therefore write during the step
             ierr = createOutputFile(io);
         }
@@ -95,9 +96,11 @@ int mainLoop(){
         }
 
         // finalize the output
-        if(istep >= iostep){
+        if((istep >= iostep) || (time >= ioTime)){
             ierr = finalizeOutputFile();
-            iostep = iostep + nstepOut;
+            iostep = istep + nstepOut;
+            ioTime = time + dtOut;
+            printf("next output at time = %.4e or step = %d\n",ioTime, iostep);
             io = io + 1;
         }
     }
@@ -105,7 +108,7 @@ int mainLoop(){
     ierr = createOutputFile(io);
     ierr = finalizeOutputFile();
     io = io + 1;
-    return -1;
+    return 1;
 }
 
 
