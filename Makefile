@@ -29,7 +29,7 @@ VPATH = ./src/Main:./src/Init:./src/Constants:./src/c_general/:./src/IO:./src/Hy
 
 
 
-OBJDIR=./bin
+OBJDIR=bin
 # Code stuff
 
 # Each directory determines what object it thinks it needs
@@ -92,15 +92,16 @@ OBJ := $(OBJ:%.o=$(OBJDIR)/%.o)
 CFLAGS += $(CDEPS)
 FFLAGS += $(FDEPS)
 .SUFFIXES: .c .F90 .F .o 
-$(OBJDIR)/%.o: %.F $(OBJDIR)
+$(OBJDIR)/%.o: %.F
+	mkdir -p $(OBJDIR)
 	$(FCOMP) -c -o $@ $< $(FLAGS) $(FFLAGS)
-$(OBJDIR)/%.o: %.F90 $(OBJDIR)
+$(OBJDIR)/%.o: %.F90
+	mkdir -p $(OBJDIR)
 	$(FCOMP) -c -o $@ $< $(FLAGS) $(FFLAGS)
-$(OBJDIR)/%.o: %.c $(OBJDIR)
+$(OBJDIR)/%.o: %.c
+	mkdir -p $(OBJDIR)
 	$(CCOMP) -c -o $@ $< $(FLAGS) $(CFLAGS)
 moshpit: $(OBJ)
 	$(CCOMP) -o $@ $^ $(FLAGS) $(CFLAGS) $(LIBS) 
-$(OBJDIR): 
-	mkdir -p $(OBJDIR)
 clean :
 	rm -f $(OBJDIR)/*.o
