@@ -135,7 +135,7 @@ int Hydro_output(){
     for(icell = NGHOST; icell < NCELLS - NGHOST; icell++){
         idx = icell*nvar;
         dens = ustate[idx];
-        velx = ustate[idx + 1];
+        velx = ustate[idx + 1]/dens;
         
         varBuff[icell - NGHOST] = (ustate[idx + ivar] - 0.5*dens*velx*velx) * (adi - 1);
     }
@@ -160,7 +160,7 @@ int Hydro_output(){
         
 #else
         // just assume atomic hydogen + helium
-        numd = rho*1.1/(mH*1.4);
+        numd = dens*1.1/(mH*1.4);
 #endif 
         varBuff[icell - NGHOST] = varBuff[icell - NGHOST]/(numd*boltzmann);
     }
