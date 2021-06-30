@@ -794,6 +794,7 @@ c
 #ifdef PDRtestChem
           Rdust = 3e-18*temp**0.5
           RH2   = Rdust * abHI * yn**2e0
+          Rdust_rat = 0d0
 #else
           Rdust  = ch7 * fa * stick
           RH2 = Rdust * abHI * yn**2.e0
