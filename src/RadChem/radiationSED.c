@@ -38,6 +38,8 @@ double getTauDustConstant(double ELbin, double ERbin){
         if(freqp >= freqmax){
             break;
         }
+        ifbin++;
+        ifbinp++;
     }
     return intTau/totFreq;
 }
