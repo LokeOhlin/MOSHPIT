@@ -212,12 +212,12 @@ int init_uniform(){
 
 int init_leftwave(){
     int icell;
-    double p0 = 1;
+    double p0 = 0.1;
     double r1 = 1.24e4;
     double r0 = 1e5;
     double u0 = 0.5*sqrt(adi*p0/r0);
-    double p1 = 1;
-    double u1 = 0.5*sqrt(adi*p0/r0);
+    double p1 = 0.1;
+    double u1 = 0.0; //0.5*sqrt(adi*p0/r0);
 
     left_bound = 2;
     bdensL = r0;
@@ -228,7 +228,6 @@ int init_leftwave(){
     bdensR = r1;
     bvelR  = r1*u1;
     benerR = r1*(p1/(r1*(adi-1))+0.5*u1*u1);
-    geometry = 0; // 0 = 1D carteesian
     
     for(icell = 0; icell < NCELLS; icell++ ){
         if( icell > 2+ (NCELLS-4)/2){
