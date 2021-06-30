@@ -1,0 +1,30 @@
+useHydro = 1
+fb_useWind  = 1
+
+nstepOut = 100
+
+imax = 100000
+tend = 2e10
+dt_init = 1e0
+dt_max  = 1e9
+
+t0 = 0
+rR = 5.2e17
+ncells = 1024
+numd_init = 100
+xH_init = 1.0
+xH2_init = 1e-10
+xCO_init = 1e-10
+
+ch_AV_conversion_factor = 0.0
+ch_max_ion_frac_change = 0.1
+
+setup = 0
+
+fb_MdotWind = 1e21
+fb_vWind = 1e8
+fb_dEmaxWind = 0.2
+
+Tstar = 1e5
+Lstar = 1e-22
+

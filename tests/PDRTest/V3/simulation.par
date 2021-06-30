@@ -1,0 +1,40 @@
+useHydro = 0
+setup = 0
+
+nstepOut = 50
+
+t0 = 0
+imax = 500
+tend = 1.577e+16
+dt_init = 1e0
+dt_max  = 1.557e13
+
+geometry = 0
+rL = 3.05e+8
+rR = 1.0e+14
+orth_extent = 6.1e+8
+
+ncells = 512
+
+numd_init = 3.16e5
+temp_init = 100
+xH_init = 0.0
+xH2_init = 0.5
+xCO_init = 1.4e-4
+
+ch_dust_to_gas_ratio = 1
+ch_max_ion_frac_change = 0.1
+
+radiationPressure = 0
+numBinsSubIon = 1
+numBinsFullIon = 1
+readSEDFromFile = 1
+
+logspace_cells = 1
+
+ch_abundO = 3e-4
+ch_abundC = 1e-4
+#ch_abundSi = 0.0
+ch_cosmic_ray_ion_rate = 5e-17
+ch_G0 = 0.0
+

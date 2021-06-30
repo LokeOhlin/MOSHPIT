@@ -54,3 +54,7 @@ Thumbs.db
 bin/
 moshpit
 
+**output_*
+**dustOut_*
+**.png
+**log

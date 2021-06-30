@@ -1,0 +1,35 @@
+useHydro = 0
+setup = 0
+
+nstepOut = 50
+
+t0 = 0
+imax = 100000
+tend = 1.577e+16
+dt_init = 1e0
+dt_max  = 1e15
+
+#rR = 3.859773388716795e+19
+rL = 1.22e+12
+rR = 4.0e+19
+orth_extent = 2.44e+14
+
+ncells = 512
+
+numd_init = 1e-3
+temp_init = 100
+xH_init = 0.0
+xH2_init = 0.5
+xCO_init = 1.4e-4
+
+ch_dust_to_gas_ratio = 1e-9
+ch_AV_conversion_factor = 0.0
+ch_max_ion_frac_change = 0.1
+
+radiationPressure = 0
+numBinsSubIon = 1
+numBinsFullIon = 1
+
+logspace_cells = 1
+
+

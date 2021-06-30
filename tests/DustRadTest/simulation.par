@@ -1,0 +1,53 @@
+useHydro = 1
+nstepOut = 999999999
+dtOut    = 1e5
+
+imax = 4000000
+t0 = 0
+tend = 4e10
+dt_init = 1e0
+dt_max  = 1e15
+
+rL = 1e+15
+rR = 1e+19
+logspace_cells = 1
+ncells = 256
+setup = 0
+
+numd_init = 1000
+temp_init = 100
+xH_init   = 0.95
+xH2_init  = 1e-6
+xCO_init  = 1e-4
+
+ch_abundC = 1e-4
+ch_abundO = 3e-4
+
+
+ch_max_ion_frac_change = 0.1
+Lstar = 5e5
+Tstar = 4e4
+radiationPressure = 0
+
+
+dust_dadt_lim = 1.0
+dust_dadt_mode = 0
+dust_dadt_c = 0.0
+dust_dadt_tscale = 1.0
+
+dust_amin = 1e-7
+dust_amax = 1e-4
+
+dust_cmin = 1.3335214321633213e-07
+dust_cmax = 7.498942093324532e-05
+
+dust_smin = 1.3335214321633213e-07
+dust_smax = 7.498942093324532e-05
+
+dust_plaw = -3.5
+
+dust_fsilicone = 0.66
+
+dust_useRadiation = 1
+dust_useSublimation = 1
+dust_useSputtering = 1

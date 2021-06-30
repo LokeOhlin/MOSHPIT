@@ -1,0 +1,40 @@
+useHydro = 1
+setup = 2
+
+nstepOut = 500
+
+imax = 100000
+tend = 1e11
+dt_init = 1e0
+dt_max  = 1e9
+
+
+rR = 1.943909355486718e+19
+ncells = 512
+left_bound = 0
+right_bound = 1
+t0 = 0
+
+numd_init = 100
+temp_init = 100
+xH_init = 1.0
+xH2_init = 0
+xCO_init = 1e-10
+
+ch_abundHe = 1e-10 
+ch_abundC  = 1e-10 
+ch_abundO  = 1e-10 
+ch_abundSi = 1e-10 
+ch_abundD  = 1e-10 
+ch_abundM  = 1e-10 
+ch_abundN  = 1e-10 
+ch_dust_to_gas_ratio = 1e-9
+ch_AV_conversion_factor = 0.0
+ch_max_ion_frac_change = 0.1
+
+Lstar = 352316
+Tstar = 45258.5
+
+radiationPressure = 0
+numBinsSubIon = 1
+numBinsFullIon = 1
