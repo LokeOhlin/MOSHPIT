@@ -9,7 +9,7 @@
 #include <cgeneral.h>
 #include <hdf5.h>
 #include <IO.h>
-
+#ifdef useChemistry
 int RadChem_initIO(){
     int ipar, rpar, ierr, rank;
     hsize_t dims_1d, start_1d, stride_1d, count_1d;
@@ -108,3 +108,4 @@ int RadChem_output(){
 
     return 1;
 }
+#endif
