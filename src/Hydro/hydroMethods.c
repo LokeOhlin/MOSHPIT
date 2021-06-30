@@ -500,6 +500,20 @@ int doHydroStep(double dt){
                 }
                 ustate[idx + ivar] = unew;
             }
+            if(ustate[idx + 2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
+                printf("NEGATIVE INTERNAL ENERGY\n");
+                printf("cell = %d \n", icell);
+                printf("dens = %.4e\n", ustate[idx]); 
+                printf("velx = %.4e\n", ustate[idx+1]/ustate[idx]); 
+                printf("etot = %.4e\n", ustate[idx+2]); 
+                printf("ekin = %.4e\n",  0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
+                printf("eint = %.4e\n", ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
+                printf("momFluxes = %.4e \t %.4e\n", fluxes[ifn + 1]*surfm, fluxes[ifp+1]*surfp);
+                printf("eneFluxes = %.4e \t %.4e\n", fluxes[ifn + 2]*surfm, fluxes[ifp+2]*surfp);
+
+
+                return -1;
+            }
             // add geometric source terms
             if(geometry == 1){
                 // Adjusted pressure such that P = constant & u = 0 => static
