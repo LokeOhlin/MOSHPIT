@@ -15,7 +15,7 @@ int getCFL(double *cfl){
         return 1;
     }
     cfl[0]=0; // initially inverted 
-    for(icell = 2; icell < NCELLS-2; icell++){
+    for(icell = 0; icell < NCELLS; icell++){
         rho = ustate[icell*nvar];
         rhoinv = 1/rho;
 
@@ -188,8 +188,8 @@ int getTVDSlopes(double *dq, double *dr, double dt){
         idxm = nvar*(icell-1);
         for(ivar = 0; ivar < nvar; ivar++){
             // Superbee slope limiter
-            dlft = (pstate[idx  + ivar] - pstate[idxm +ivar])/dr[icell];
-            drgt = (pstate[idxp + ivar] - pstate[idx  +ivar])/dr[icell];
+            dlft = (pstate[idx  + ivar] - pstate[idxm + ivar])/dr[icell];
+            drgt = (pstate[idxp + ivar] - pstate[idx  + ivar])/dr[icell];
             
             sigm1 = minmod(  drgt,2*dlft);
             sigm2 = minmod(2*drgt,  dlft);
@@ -245,7 +245,7 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
         if(geometry == 1){
             drp= rs[icell] + dr[icell]/2;
             drm= rs[icell] - dr[icell]/2;
-            twooR = 2/rs[icell];
+            twooR = 2/fabs(rs[icell]);
 
             // add geometric source terms to left and right states
             qM[idx]     = qM[idx]     - rho*vel*twooR * 0.5*dt;
@@ -256,12 +256,12 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             //qP[idx + 1] = qP[idx + 1] - pre/rho  * 0.5*dt;
             qP[idx + 2] = qP[idx + 2] - pre*vel*twooR* 0.5*dt;
 
-            if(drm < dr[icell/2]){ // No velocity at zero
-                qM[idx + 1 ] = 0;
-            }
-            if(drp <= dr[icell]/2){ // No velocity at zero
-                qP[idx + 1 ] = 0;
-            }
+            //if(fabs(drm) < dr[icell]/2){ // No velocity at zero
+            //    qM[idx + 1 ] = 0;
+            //}
+            //if(fabs(drp) <= dr[icell]/2){ // No velocity at zero
+            //    qP[idx + 1 ] = 0;
+            //}
         }
         if(qP[idx] <= 0){
             printf("\n idx = %d \n", icell);
@@ -282,6 +282,19 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
             qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
         }
+#ifdef useDust
+        for(ivar = IDUST_START; ivar < nvar; ivar++){
+            // cell centered value
+            qi = pstate[idx + ivar];
+            // slope
+            dqix = dq[idx + ivar];
+            //source terms
+            Sqi  = -vel*dqix;
+
+            qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
+            qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
+        }
+#endif
 #endif
     }
     return 1;  
@@ -385,12 +398,12 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
 #endif
 #ifdef useDust
     for(ivar = IDUST_START; ivar < nvar; ivar++){
-        //if(velS > 0){
-        //    var0 = qL[ivar];
-        //} else {
-        //    var0 = qR[ivar];
-        //}   
-        flux[ivar] = 0;//var0*vel0;
+        if(velS > 0){
+            var0 = qL[ivar];
+        } else {
+            var0 = qR[ivar];
+        }   
+        flux[ivar] = var0*vel0;
     }
 #endif
     return 1;
@@ -422,6 +435,9 @@ int getFluxes(double *qM, double *qP, double *fluxes){
         // save fluxes
         idx = iinter*nvar;
         for(ivar = 0; ivar < nvar; ivar++){
+            //if(iinter == 0){
+            //    printf("%.4e %.4e %.4e\n", flux[ivar], qL[ivar], qR[ivar]);
+            //}
             fluxes[idx+ivar] = flux[ivar];
         }
     }
@@ -432,9 +448,10 @@ int doHydroStep(double dt){
     int ierr;
     int icell, idx,ifp,ifn, ivar;
     double dq[nvar*NCELLS], qM[nvar*NCELLS], qP[nvar*NCELLS];
-    double fluxes[nvar*NINTER], unew;
+    double fluxes[nvar*NINTER], unew, uold[nvar];
     double rm,rp, surfm = 1, surfp = 1, vol;
     double smom;
+    int idxm, idxp;
     ierr = setBoundary();
     if(ierr < 0){
         printf("Error in setBoundary\n");
@@ -498,21 +515,27 @@ int doHydroStep(double dt){
                     printf("icell = %d \n",icell); 
                     return -1;
                 }
+                uold[ivar] = ustate[idx+ivar];
                 ustate[idx + ivar] = unew;
             }
             if(ustate[idx + 2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
+                idxm = (icell-1)*nvar;
+                idxp = (icell+1)*nvar;
                 printf("NEGATIVE INTERNAL ENERGY\n");
                 printf("cell = %d \n", icell);
-                printf("dens = %.4e\n", ustate[idx]); 
-                printf("velx = %.4e\n", ustate[idx+1]/ustate[idx]); 
-                printf("etot = %.4e\n", ustate[idx+2]); 
+                printf("dens = %.4e %.4e %.4e \n", ustate[idxm], uold[0], ustate[idxp]); 
+                printf("velx = %.4e %.4e %.4e \n", ustate[idxm+1]/ustate[idxm], uold[1]/uold[0], ustate[idxp+1]/ustate[idxp]); 
+                printf("etot = %.4e %.4e %.4e \n", ustate[idxm+2], uold[2], ustate[idxp+2]); 
+                printf("enew = %.4e %.4e %.4e \n", ustate[idxm+2], ustate[idx + 2], ustate[idxp+2]); 
                 printf("ekin = %.4e\n",  0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
                 printf("eint = %.4e\n", ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
+                printf("rhoFluxes = %.4e \t %.4e\n", fluxes[ifn + 0]*surfm, fluxes[ifp+0]*surfp);
                 printf("momFluxes = %.4e \t %.4e\n", fluxes[ifn + 1]*surfm, fluxes[ifp+1]*surfp);
                 printf("eneFluxes = %.4e \t %.4e\n", fluxes[ifn + 2]*surfm, fluxes[ifp+2]*surfp);
 
-
-                return -1;
+                if(ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
+                    return -1;
+                }
             }
             // add geometric source terms
             if(geometry == 1){

@@ -19,10 +19,14 @@ double getTauDustConstant(double ELbin, double ERbin){
 
     ifbin = binarySearch(freqmin, MNR_abs_freqs, MNR_abs_Nfbins);
     ifbinp = ifbin + 1;
-    double intTau;
-    double totFreq;
+    double intTau = 0;
+    double totFreq = 0;
     double delf, delTau, tau, taup;
     while(1) {
+        if(ifbinp >= MNR_abs_Nfbins){
+            printf("Energy bin exceeds the tabulated dust absorption values %.4e %.4e\n", freqmax, MNR_abs_freqs[MNR_abs_Nfbins]);
+        }
+
         freq  = MNR_abs_freqs [ifbin];
         freqp = MNR_abs_freqs [ifbinp];
         tau   = MNR_abs_tauTot[ifbin]; 

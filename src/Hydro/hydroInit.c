@@ -146,7 +146,7 @@ int initHydro(){
     
     // add ghost cells to total
     NCELLS = NCELLS + 2*NGHOST;
-    NINTER = NCELLS - 2*NGHOST + 1;
+    NINTER = NCELLS - 2*NGHOST + 2;
 
     // General hydro stuff
     getrealhydropar("gamma", &adi);
@@ -212,14 +212,23 @@ int init_uniform(){
 
 int init_leftwave(){
     int icell;
-    double p0 = 0.1;
-    double r1 = 1.24e4;
-    double r0 = 1e5;
-    double u0 = 0.5*sqrt(adi*p0/r0);
-    double p1 = 0.1;
-    double u1 = 0.0; //0.5*sqrt(adi*p0/r0);
-
-    left_bound = 2;
+    double r0, r1, p0, p1, u0, u1;
+    if(geometry == 1){
+        r0 = 1.0;
+        r1 = 0.25;
+        p0 = 1.0;
+        p1 = 0.1;
+        u0 = 0.0; // 10*sqrt(adi*p0/r0);
+        u1 = 0.0; //0.5*sqrt(adi*p0/r0);
+    } else {
+        r0 = 1e5;
+        r1 = 1.24e4;
+        p0 = 0.001*r0;
+        p1 = 0.001*r1;
+        u0 = 10*sqrt(adi*p0/r0);
+        u1 = 0.0; //0.5*sqrt(adi*p0/r0);
+    }
+    left_bound = 0;
     bdensL = r0;
     bvelL  = r0*u0;
     benerL = r0*(p0/(r0*(adi-1))+0.5*u0*u0);
@@ -306,7 +315,6 @@ int init_grid(){
 
         for(icell = 0; icell < NCELLS; icell++){
             rs[icell]  = dr_const*(icell - NGHOST +1./2.);
-
             rp = rs[icell] + 0.5*dr_const;
             rm = rs[icell] - 0.5*dr_const;
             
@@ -332,7 +340,7 @@ int init_grid(){
         }
         // set lower ghost cells, reflect around 0
         for(icell = 0; icell < NGHOST; icell ++){
-            rs[icell] = - rs[2*NGHOST - icell - 1]; 
+                rs[icell] = - rs[2*NGHOST - icell - 1]; 
         }
 
         // Calculate cell sizes and volumes
