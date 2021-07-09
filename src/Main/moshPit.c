@@ -46,7 +46,7 @@ int mainLoop(){
         }
         printf("step %d time = %.4e dt = %.4e || dt_CFL = %.4e  dt_chem= %.4e\n", istep, time ,dt, dt_new,dt_chem);
         // check if we are outputing on this step
-        if((istep + 1 >= iostep) || (time + dt > ioTime)){
+        if((istep + 1 >= iostep) || (time + dt >= ioTime)){
             // we create file here since some modules (dust) does not store much of the data, so must therefore write during the step
             ierr = createOutputFile(io);
         }
