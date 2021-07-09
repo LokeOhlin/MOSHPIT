@@ -16,10 +16,10 @@ cmap = matplotlib.cm.get_cmap('plasma')
 for idx, f in enumerate(args.f):
     
     hfile = hp.File(f, 'r')
-    print(f, hfile['Header'].attrs.get('time')/cgs.yr) 
-    rad = hfile['radius'][:]
+    print(f, hfile['Headers'].attrs.get('time')/cgs.yr) 
+    rad = hfile['coordinates'][:]
     abin_c = hfile['agrain'][:]
-    isilicone = hfile['Header'].attrs.get('isilicone')
+    isilicone = hfile['Headers'].attrs.get('isilicone')
     num_c = hfile['number'][:,:isilicone]
     num_s = hfile['number'][:,isilicone:]
 

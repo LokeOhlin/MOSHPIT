@@ -19,9 +19,9 @@ for idx, f in enumerate(args.f):
     
     hfile = hp.File(f, 'r')
     
-    rad = hfile['radius'][:]
+    rad = hfile['coordinates'][:]
     ephots = hfile['photonBins'][:][:]
-    isilicone = hfile['Header'].attrs.get('isilicone')
+    isilicone = hfile['Headers'].attrs.get('isilicone')
     opacity = np.sum(hfile['opticalDepth'][:,:,:], axis = 1)
 
     idxs = [0, int(len(rad)/4), int(len(rad)/2), int(3*len(rad)/4), -1]
