@@ -281,6 +281,11 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
 
             qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
             qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
+            // Geometric source term same as for density
+            if(geometry == 1){
+                qM[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
+                qP[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
+            }
         }
 #ifdef useDust
         for(ivar = IDUST_START; ivar < nvar; ivar++){
@@ -293,6 +298,11 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
 
             qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
             qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
+            // Geometric source term same as for density
+            if(geometry == 1){
+                qM[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
+                qP[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
+            }
         }
 #endif
 #endif
@@ -406,12 +416,29 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
         flux[ivar] = var0*vel0;
     }
 #endif
+    // transport of internal energy. Needed for eintswitch when Ekin ~ Etot
+    // based on li 2008 "A Simple Dual Implementation to Track Pressure Accurately"
+    // average pressure
+    if(hy_ethresh >= 0.0){
+        if(flux[0] == 0.0){
+            flux[nvar] = 0.0;
+            flux[nvar + 1] = 0.0;
+        } else { 
+            if(flux[0] > 0){ // if flux flowing from left to right
+                flux[nvar] = flux[0]/qL[0] * qL[2]/(adi-1); 
+                flux[nvar + 1] = flux[0]/qL[0];
+            } else {
+                flux[nvar] = flux[0]/qR[0] * qR[2]/(adi-1);
+                flux[nvar + 1] = flux[0]/qR[0];
+            }
+        }
+    }
     return 1;
 }
 
 int getFluxes(double *qM, double *qP, double *fluxes){
     int iinter, idx, ivar, ierr;
-    double qL[nvar], qR[nvar], flux[nvar];
+    double qL[nvar], qR[nvar], flux[nFluxVar];
 
     // Loop over interfaces
     for(iinter=0; iinter < NINTER; iinter++){
@@ -433,8 +460,8 @@ int getFluxes(double *qM, double *qP, double *fluxes){
             return -1;
         }
         // save fluxes
-        idx = iinter*nvar;
-        for(ivar = 0; ivar < nvar; ivar++){
+        idx = iinter*nFluxVar;
+        for(ivar = 0; ivar < nFluxVar; ivar++){
             //if(iinter == 0){
             //    printf("%.4e %.4e %.4e\n", flux[ivar], qL[ivar], qR[ivar]);
             //}
@@ -448,9 +475,10 @@ int doHydroStep(double dt){
     int ierr;
     int icell, idx,ifp,ifn, ivar;
     double dq[nvar*NCELLS], qM[nvar*NCELLS], qP[nvar*NCELLS];
-    double fluxes[nvar*NINTER], unew, uold[nvar];
+    double fluxes[nFluxVar*NINTER], unew, uold[nvar];
     double rm,rp, surfm = 1, surfp = 1, vol;
     double smom;
+    double Ethermal, Ekinetic, presStar;
     int idxm, idxp;
     ierr = setBoundary();
     if(ierr < 0){
@@ -487,8 +515,8 @@ int doHydroStep(double dt){
         // Update the conservative variables
         for(icell = 2; icell < NCELLS-2; icell++){
             idx  = icell*nvar;
-            ifp = (icell-1)*nvar;
-            ifn = (icell-2)*nvar;
+            ifp = (icell-1)*nFluxVar;
+            ifn = (icell-2)*nFluxVar;
 
             if(geometry == 1){
                 rm = rs[icell] - dr[icell]*0.5;
@@ -501,7 +529,23 @@ int doHydroStep(double dt){
             } else {
                 vol = dr[icell];
             }
-
+            
+            if(hy_ethresh >= 0.0) {
+                // get initial internal temperature
+                // Ekin = 0.5*rho v**2 = 0.5 * momx*momx/rho
+                Ethermal = ustate[idx + 2] - 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
+                // predicted half step pressure of at cell center
+                presStar = (surfp*qP[idx + 2] + surfm*qM[idx + 2])/(surfm+surfp);
+                //printf("icell %d \n", icell);
+                //printf("Ethermal %.4e dEdt %.4e \n", Ethermal, (fluxes[ifn + nvar]*surfm - fluxes[ifp+ivar]*surfp)*dt/vol + presStar*(fluxes[ifn + nvar + 1]*surfm - fluxes[ifp+nvar + 1]*surfp)*dt/vol);
+                //printf("fluxes %.4e %.4e %.4e %.4e \n", fluxes[ifn + nvar], fluxes[ifp + nvar], fluxes[ifn + nvar + 1], fluxes[ifp + nvar + 1]);
+                //printf("dens %.4e mom %.4e ener %.4e\n", ustate[idx], ustate[idx+1], ustate[idx+2]);
+                //printf("\n");
+                Ethermal = Ethermal +            (fluxes[ifn + nvar]*surfm     - fluxes[ifp + nvar]*surfp)*dt/vol;
+                Ethermal = Ethermal + presStar * (fluxes[ifn + nvar + 1]*surfm - fluxes[ifp + nvar + 1]*surfp)*dt/vol;
+                Ethermal = fmax(Ethermal, 1e-40);
+            }
+            
             for(ivar = 0; ivar<nvar; ivar++){
                 unew = ustate[idx+ivar]+(fluxes[ifn+ivar]*surfm-fluxes[ifp+ivar]*surfp)*dt/vol;
                 //if(icell < 10 && ivar < 3){
@@ -518,6 +562,22 @@ int doHydroStep(double dt){
                 uold[ivar] = ustate[idx+ivar];
                 ustate[idx + ivar] = unew;
             }
+
+            // add geometric source terms
+            if(geometry == 1){
+                // Adjusted pressure such that P = constant & u = 0 => static
+                // qstate still not updated
+                smom = (surfp - surfm) * pstate[idx + 2]/vol;
+                //smom = 2*qstate[idx + 2]/rs[icell];
+                ustate[idx + 1] = ustate[idx + 1] + smom*dt;
+            }
+            if(hy_ethresh>=0.0){
+                if(Ethermal < ustate[idx + 2]*hy_ethresh){
+                    Ekinetic = 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
+                    ustate[idx + 2] = Ekinetic + Ethermal;
+                }
+            }
+            
             if(ustate[idx + 2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
                 idxm = (icell-1)*nvar;
                 idxp = (icell+1)*nvar;
@@ -537,15 +597,6 @@ int doHydroStep(double dt){
                     return -1;
                 }
             }
-            // add geometric source terms
-            if(geometry == 1){
-                // Adjusted pressure such that P = constant & u = 0 => static
-                // qstate still not updated
-                smom = (surfp - surfm) * pstate[idx + 2]/vol;
-                //smom = 2*qstate[idx + 2]/rs[icell];
-                ustate[idx + 1] = ustate[idx + 1] + smom*dt;
-            }
-
         }
     }
     fixState();

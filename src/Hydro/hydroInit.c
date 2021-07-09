@@ -11,7 +11,7 @@
     #include <dust.h>
 #endif
 
-int nrealHydroPars = 16;
+int nrealHydroPars = 17;
 real_list_t *hydroDPars = NULL;
 int nintHydroPars = 8;
 int_list_t *hydroIPars = NULL;
@@ -40,6 +40,10 @@ int right_bound ;
 double bdensR   ; 
 double bvelR    ; 
 double benerR   ; 
+
+// threshhold fraction to use approximate Eint solution rather than total energy when
+// Eint < Etot*hy_ethresh
+double hy_ethresh;
 
 int NCELLS;
 int NGHOST;
@@ -71,15 +75,17 @@ int setHydroPars(){
 
     strcpy(hydroDPars[7].name, "rL"); hydroDPars[7].value = 0.; 
     strcpy(hydroDPars[8].name, "rR"); hydroDPars[8].value = 100.; 
-    strcpy(hydroDPars[15].name, "orth_extent"); hydroDPars[15].value = -1.0; 
+    strcpy(hydroDPars[9].name, "orth_extent"); hydroDPars[9].value = -1.0; 
     
-    strcpy(hydroDPars[9].name, "bdensR"); hydroDPars[9].value = 1.; 
-    strcpy(hydroDPars[10].name, "bvelR"); hydroDPars[10].value = 1.; 
-    strcpy(hydroDPars[11].name, "benerR"); hydroDPars[11].value = 1.; 
+    strcpy(hydroDPars[10].name, "bdensR"); hydroDPars[10].value = 1.; 
+    strcpy(hydroDPars[11].name, "bvelR");  hydroDPars[11].value = 1.; 
+    strcpy(hydroDPars[12].name, "benerR"); hydroDPars[12].value = 1.; 
     
-    strcpy(hydroDPars[12].name, "bdensL"); hydroDPars[12].value = 1.; 
-    strcpy(hydroDPars[13].name, "bvelL"); hydroDPars[13].value = 1.; 
-    strcpy(hydroDPars[14].name, "benerL"); hydroDPars[14].value = 1.; 
+    strcpy(hydroDPars[13].name, "bdensL"); hydroDPars[13].value = 1.; 
+    strcpy(hydroDPars[14].name, "bvelL");  hydroDPars[14].value = 1.; 
+    strcpy(hydroDPars[15].name, "benerL"); hydroDPars[15].value = 1.; 
+    
+    strcpy(hydroDPars[16].name, "hy_ethresh"); hydroDPars[16].value = 0.01; 
      
     // Ints
     strcpy(hydroIPars[0].name, "ncells");      hydroIPars[0].value = 512;
@@ -146,7 +152,7 @@ int initHydro(){
     
     // add ghost cells to total
     NCELLS = NCELLS + 2*NGHOST;
-    NINTER = NCELLS - 2*NGHOST + 2;
+    NINTER = NCELLS - 2*NGHOST + 1;
 
     // General hydro stuff
     getrealhydropar("gamma", &adi);
@@ -168,6 +174,8 @@ int initHydro(){
         getrealhydropar("bvelR", &bvelR);
         getrealhydropar("benerR", &benerR);
     }
+    
+    getrealhydropar("hy_ethresh", &hy_ethresh);
 
     getintegerhydropar("useHydro", &useHydro);
     return 1;
@@ -217,15 +225,15 @@ int init_leftwave(){
         r0 = 1.0;
         r1 = 0.25;
         p0 = 1.0;
-        p1 = 0.1;
-        u0 = 0.0; // 10*sqrt(adi*p0/r0);
+        p1 = 1.0;
+        u0 = 10*sqrt(adi*p0/r0);
         u1 = 0.0; //0.5*sqrt(adi*p0/r0);
     } else {
         r0 = 1e5;
         r1 = 1.24e4;
         p0 = 0.001*r0;
         p1 = 0.001*r1;
-        u0 = 10*sqrt(adi*p0/r0);
+        u0 = 0.0; //10*sqrt(adi*p0/r0);
         u1 = 0.0; //0.5*sqrt(adi*p0/r0);
     }
     left_bound = 0;
@@ -246,8 +254,8 @@ int init_leftwave(){
         }
         else{
             ustate[icell*nvar] = r0;
-            ustate[icell*nvar +1 ] = r0*u0;
-            ustate[icell*nvar +2 ] = r0*(p0/(r0*(adi-1))+0.5*u0*u0);
+            ustate[icell*nvar +1] = r0*u0;
+            ustate[icell*nvar +2] = r0*(p0/(r0*(adi-1))+0.5*u0*u0);
         }
     }
     return 1;

@@ -26,6 +26,7 @@
     #define ICHEM_END 3
     #define nvar 3
 #endif
+#define nFluxVar (nvar + 2)
 int toPrimitive();
 int doHydroStep(double dt);
 int getCFL(double *cfl);
@@ -52,6 +53,7 @@ extern double bdensR, bvelR, benerR;
 // HYDRO CONSTANTS
 extern double adi;
 extern double courant_number;
+extern double hy_ethresh;
 
 //Pointers to state arrays
 extern double *ustate;
