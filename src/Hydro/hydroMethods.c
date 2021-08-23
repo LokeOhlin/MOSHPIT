@@ -574,6 +574,7 @@ int doHydroStep(double dt){
             if(hy_ethresh>=0.0){
                 if(Ethermal < ustate[idx + 2]*hy_ethresh){
                     Ekinetic = 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
+                    //printf("%.4e %.4e \n", Ethermal, Ekinetic);
                     ustate[idx + 2] = Ekinetic + Ethermal;
                 }
             }
