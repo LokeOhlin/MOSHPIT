@@ -88,9 +88,7 @@ def maxwell2DSputteringYield(vort, integral, vpar, usq, Mp, Zp, Md, Zd, U0, K, k
     Maxwell = maxnorm * vort * np.exp(-maxexpnorm*vsqr)
     fx =  finite_grain_correction(Ener, agrain, Zp, graphite)
     vel = np.sqrt(vort*vort + usq) 
-    #if(yld*Maxwell*vel*fx < 0):
-    #    print(vel, yld, Maxwell, fx)
-    #print(yld, Maxwell, vort, usq, fx)
+    
     return yld*Maxwell*vel*fx
 
 def dvpar(vpar, integral, Mp, Zp, Md, Zd, U0, K, kbTgas, vrel, agrain, graphite, Ethresh, Emax_finiteGrain, Enorm, maxnorm, maxexpnorm, odeort):
@@ -188,7 +186,7 @@ U0_s = 5.8
 
 # Table parameters
 # Temperature
-numTemps   = 10
+numTemps   = 1
 Tmin = 1e3
 Tmax = 1e6
 
@@ -199,17 +197,25 @@ amax = 1e-3
 
 # velocities 
 numVels    = 4
-minv_fact  = 0.1
+minv_fact  = 1
 rp_nagrain = 10
+# velocites are generated from v(Ethresh) + minv to v(Ethresh) + maxv 
+# these are in units of vscale = v(RP = rp_nagrain) - v(Ethresh)
+minv = 1e-2
+maxv = 1e0
+vtilde = np.logspace(np.log10(minv), np.log10(maxv), numVels - 1)
+
+
 #Space out gas temperatures between Tmax and Tmin
 Tgas    = np.logspace(np.log10(Tmin), np.log10(Tmax), numTemps)
+
 #Preallocate arrays
 totLoss_graphite = np.zeros(Tgas.shape)
 totLoss_silicone = np.zeros(Tgas.shape)
 
 #agrains between amax and amin
 agrains = np.logspace(np.log10(amin), np.log10(amax), numGrains)
-agrains = np.array([1e-7])#, 1e-6, 1e-4])#, 1e-3])
+agrains = np.array([1e-7, 1e-6, 1e-4])#, 1e-3])
 
 # space out velocities between vmin and vmax in units of maximum velocity 
 # (defined as the velocity at which the penetration depth is = 10)
@@ -229,17 +235,24 @@ for ia, agrain in enumerate(agrains):
     
 acols = ['b', 'r', 'g', 'orange']
 
+
 with open('sputtering_yield.dat', 'w') as f:
     f.write('# ngrain = {}\n'.format(numGrains))
     f.write('# nvels  = {}\n'.format(numTemps))
     f.write('# ntemps = {}\n'.format(numTemps))
     for ia, agrain in enumerate(agrains):
-        vrels_c = np.append(np.array([0]), np.logspace(np.log10(minvels_c[ia]), np.log10(maxvels_c[ia]), numVels - 1))
-        vrels_s = np.append(np.array([0]), np.logspace(np.log10(minvels_s[ia]), np.log10(maxvels_s[ia]), numVels - 1))
+        # scale vtilde and add to vmin
+        vrels_c = np.append(np.array([0]), minvels_c[ia]+vtilde*(maxvels_c[ia] - minvels_c[ia]))
+        vrels_s = np.append(np.array([0]), minvels_s[ia]+vtilde*(maxvels_s[ia] - minvels_s[ia]))
+        #vrels_s = np.append(np.array([0]), np.logspace(np.log10(minvels_s[ia]), np.log10(maxvels_s[ia]), numVels - 1))
         for iv in range(len(vrels_c)) :
             graphDone = False
             silicDone = False
-            
+            if(iv == 0):
+                vtilde_i = 0
+            else:
+                vtilde_i = vtilde[iv-1]
+
             for i in range(len(Tgas)):
                 print(agrain, vrels_c[iv], vrels_s[iv], Tgas[i])
                 if not graphDone :
@@ -247,8 +260,8 @@ with open('sputtering_yield.dat', 'w') as f:
                 if not silicDone :
                     totLoss_silicone[i] = getTotalLoss(Md_s, Zd_s, U0_s, K_s, cgs.kb*Tgas[i], vrels_s[iv], proj_mass, proj_atom, proj_abund, agrain, 0)
 
-                # save in format of agrain, Tgas, vrel, rate for both graphite and silicates
-                f.write('{} {} {} {} {} {}\n'.format(agrain, Tgas[i], vrels_c[iv], totLoss_graphite[i], vrels_s[iv], totLoss_silicone[i]))
+                # save in format of agrain, vrel, Tgas and rate for both graphite and silicates
+                f.write('{} {} {} {} {} \n'.format(agrain, vtilde_i, Tgas[i], totLoss_graphite[i], totLoss_silicone[i]))
                 # Past a givne temperature the sputtering rate only goes down as more of the particles will
                 # hit the dust grains with penetration depths much larger than the grain size
                 # if we hit zero we can stop
