@@ -224,8 +224,8 @@ int init_leftwave(){
     if(geometry == 1){
         r0 = 1.0;
         r1 = 0.25;
-        p0 = 1.0;
-        p1 = 1.0;
+        p0 = 7.5e9;
+        p1 = 1.87e9;
         u0 = 10*sqrt(adi*p0/r0);
         u1 = 0.0; //0.5*sqrt(adi*p0/r0);
     } else {
