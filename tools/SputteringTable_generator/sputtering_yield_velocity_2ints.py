@@ -88,7 +88,6 @@ def maxwell2DSputteringYield(vort, integral, vpar, usq, Mp, Zp, Md, Zd, U0, K, k
     Maxwell = maxnorm * vort * np.exp(-maxexpnorm*vsqr)
     fx =  finite_grain_correction(Ener, agrain, Zp, graphite)
     vel = np.sqrt(vort*vort + usq) 
-    
     return yld*Maxwell*vel*fx
 
 def dvpar(vpar, integral, Mp, Zp, Md, Zd, U0, K, kbTgas, vrel, agrain, graphite, Ethresh, Emax_finiteGrain, Enorm, maxnorm, maxexpnorm, odeort):
@@ -106,8 +105,8 @@ def dvpar(vpar, integral, Mp, Zp, Md, Zd, U0, K, kbTgas, vrel, agrain, graphite,
     odeort.set_f_params(vpar, usq, Mp, Zp, Md, Zd, U0, K, kbTgas, vrel, agrain, graphite, Ethresh, Enorm, maxnorm, maxexpnorm)
     odeort.set_initial_value(0,vmin)
     odeort.integrate(vmax)
-    #if not odeort.successful():
-    #    print(vpar, vrel, agrain, odeort.y[0])
+    if not odeort.successful():
+        print("inner")
     return odeort.y[0]
 
 def getAverageSputtering(Mp, Zp, Md, Zd, U0, K, kbTgas, vrel, agrain, graphite):
@@ -124,18 +123,26 @@ def getAverageSputtering(Mp, Zp, Md, Zd, U0, K, kbTgas, vrel, agrain, graphite):
         Ethresh = 8*U0*mui**(-1/3)*cgs.eV
     Emax_finiteGrain = getEofRp(10*agrain, Zp, graphite)
     dvmax = np.sqrt(Emax_finiteGrain/Enorm)
-    vmin = min(vrel - dvmax, -np.sqrt(25/maxexpnorm))
-    vmax = max(vrel - dvmax,  np.sqrt(25/maxexpnorm))
+    vmin = max(vrel - dvmax, -np.sqrt(25/maxexpnorm))
+    vmax = min(vrel + dvmax,  np.sqrt(25/maxexpnorm))
 
-    odepar = ode(dvpar).set_integrator('dopri5', nsteps = 1000000000 )
+    odepar = ode(dvpar).set_integrator('dopri5', nsteps = 1000000000)#first_step = max(vmax - vrel, vrel - vmin)*1e-3)
     odeort = ode(maxwell2DSputteringYield).set_integrator('dopri5', nsteps = 1000000000 )
     odepar.set_f_params(Mp, Zp, Md, Zd, U0, K, kbTgas, vrel, agrain, graphite, Ethresh, Emax_finiteGrain, Enorm, maxnorm, maxexpnorm, odeort)
-    
-    odepar.set_initial_value(0, vrel)
-    y = odepar.integrate(vmax)
-
-    odepar.set_initial_value(0, vrel)
-    y -= odepar.integrate(vmin)
+   
+    y = np.zeros(1)
+    if(vmax > vrel):
+        odepar.set_initial_value(0, vrel)
+        y += odepar.integrate(vmax)
+        if not odepar.successful():
+            print("outer 1", odepar.y, vrel, vmax, vmax - vrel)
+            sys.exit(0)
+    if(vmin < vrel and vmin < np.sqrt(25/maxexpnorm)):
+        odepar.set_initial_value(0, min(vrel, np.sqrt(25/maxexpnorm)))
+        y -= odepar.integrate(vmin)
+        if not odepar.successful():
+            print("outer 2", odepar.y, vrel, vmin, vrel - vmin)
+            sys.exit(0)
     
     return max(y[0],0)
 
@@ -186,9 +193,9 @@ U0_s = 5.8
 
 # Table parameters
 # Temperature
-numTemps   = 1
+numTemps   = 30
 Tmin = 1e3
-Tmax = 1e6
+Tmax = 1e8
 
 # Grain size
 numGrains  = 30
@@ -196,7 +203,7 @@ amin = 3*cgs.A
 amax = 1e-3
 
 # velocities 
-numVels    = 4
+numVels    = 3
 minv_fact  = 1
 rp_nagrain = 10
 # velocites are generated from v(Ethresh) + minv to v(Ethresh) + maxv 
@@ -215,7 +222,7 @@ totLoss_silicone = np.zeros(Tgas.shape)
 
 #agrains between amax and amin
 agrains = np.logspace(np.log10(amin), np.log10(amax), numGrains)
-agrains = np.array([1e-7, 1e-6, 1e-4])#, 1e-3])
+agrains = np.array([1e-4])#, 1e-3])
 
 # space out velocities between vmin and vmax in units of maximum velocity 
 # (defined as the velocity at which the penetration depth is = 10)
@@ -254,6 +261,7 @@ with open('sputtering_yield.dat', 'w') as f:
                 vtilde_i = vtilde[iv-1]
 
             for i in range(len(Tgas)):
+                #print("\n ----------------- \n")
                 print(agrain, vrels_c[iv], vrels_s[iv], Tgas[i])
                 if not graphDone :
                     totLoss_graphite[i] = getTotalLoss(Md_c, Zd_c, U0_c, K_c, cgs.kb*Tgas[i], vrels_c[iv], proj_mass, proj_atom, proj_abund, agrain, 1)
