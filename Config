@@ -1,23 +1,29 @@
-# Dust model parameters
+## Dust model parameters
 #
 
-# overaching flag
+## overaching flag
 FLAGS += -DuseDust
-# total number of dust bins to be distributed across dust species 
-FLAGS += -DNdustBins=60
 
+## total number of dust bins to be distributed across dust species 
+#FLAGS += -DNdustBins=60
 
-# Chemistry parameters
+## use relative velocity between dust and gas when calculating sputtering
+FLAGS += -DsputteringUseVelocities
+
+## track the velocity of dust grains over the simulation
+#FLAGS += trackDustVelocities
+
+## Chemistry parameters
 #
 
-# overarching flag
+## overarching flag
 FLAGS += -DuseChemistry
 
-#simplified network for only using atomic hydrogen
+##simplified network for only using atomic hydrogen
 #FLAGS += -DTESTATOMONLY
 
-#change used values and function to match PDR tests
+##change used values and function to match PDR tests
 #FLAGS += -DPDRtestChem 
 
-#Fortran FLAGS
+##Fortran FLAGS
 FFLAGS += -DCHEMISTRYNETWORK=5
