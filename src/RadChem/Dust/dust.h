@@ -44,11 +44,17 @@ int getSputYield_ida(double agrain, int graphite);
 int getSputYield_idt(double tgas, int graphite);
 // getting and calcualtint yields and sputtering rates
 double getSputYield_t(double tgas, int graphite, int ida, int *idt);
+double getSputYield_vel_t(double tgas, int graphite, int ida, int idv, int *idt);
 double getSputYield(double agrain, double tgas, int graphite, int *ida, int *idt);
+double getSputYield_vel(double agrain, double vdust, double tgas, int graphite, int *ida, int *idt);
 double get_dadt_sputtering(double agrain, int ibin, int iabin, int graphite, double numd, double tgas, int *idt);
+double get_dadt_sputtering_vel(double agrain, int ibin, int iabin, int graphite, double numd, double vdust, double tgas, int *idt);
 
 // general method to calculate growth for each dustbin
-int set_dadt(double *rpars);
+// independent of substep
+int set_dadt_fixed(double *rpars);
+// dependent on substep
+int set_dadt(double *rpars, double dt);
 
 
 int Dust_initIO();
@@ -56,7 +62,7 @@ int Dust_outputCell(int icell, double dr);
 int Dust_output();
 #endif
 // Scratch arrays
-extern double *dadt, *number, *slope, *Mnew, *Nnew, *Snew;
+extern double *dadt, *dadt_fixed, *number, *slope, *Mnew, *Nnew, *Snew, *dust_vrel;
 // Values that are only dependent on bin size and are constant
 extern double *abin_e, *abin_c;
 extern double *NfactM, *NfactA;

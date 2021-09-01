@@ -6,6 +6,7 @@
 #include <cgeneral.h>
 #include <dust.h>
 #include <constantsAndUnits.h>
+#include <hydro.h>
 #ifdef useDust
 int nphotBins;
 

@@ -55,9 +55,12 @@ int dust_upperBound_pileUp;
 // Number of atoms in a grain 
 double *Natoms = NULL;
 // scratch arrays for calculations in each cell
-double *dadt   = NULL;
+double *dadt         = NULL;
+double *dadt_fixed   = NULL;
 double *number = NULL;
 double *slope  = NULL;
+
+double *dust_vrel = NULL;
 
 double *Mnew = NULL;
 double *Nnew = NULL;
@@ -371,14 +374,16 @@ int initDust(){
         dust_nbins = NdustBins + 2*dust_nghost;
     }
 
-    Natoms = (double *) malloc(dust_nbins*sizeof(double));  
-    dadt   = (double *) malloc(dust_nbins*sizeof(double));  
-    number = (double *) malloc(dust_nbins*sizeof(double)); 
-    slope  = (double *) malloc(dust_nbins*sizeof(double)); 
-    Mnew   = (double *) malloc(dust_nbins*sizeof(double)); 
-    Nnew   = (double *) malloc(dust_nbins*sizeof(double)); 
-    Snew   = (double *) malloc(dust_nbins*sizeof(double)); 
-
+    Natoms       = (double *) malloc(dust_nbins*sizeof(double));  
+    dadt         = (double *) malloc(dust_nbins*sizeof(double));  
+    dadt_fixed   = (double *) malloc(dust_nbins*sizeof(double));  
+    number       = (double *) malloc(dust_nbins*sizeof(double)); 
+    slope        = (double *) malloc(dust_nbins*sizeof(double)); 
+    Mnew         = (double *) malloc(dust_nbins*sizeof(double)); 
+    Nnew         = (double *) malloc(dust_nbins*sizeof(double)); 
+    Snew         = (double *) malloc(dust_nbins*sizeof(double)); 
+    
+    dust_vrel = (double *) malloc(dust_nbins*sizeof(double)); 
         
     // determine where the cutoff point is for silicates
     if(fSi < 1.0){

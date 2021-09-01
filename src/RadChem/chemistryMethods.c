@@ -29,7 +29,7 @@ int doChemistryStep(double dt, double *dt_chem){
     double Tdust, fshield_CO, fshield_H2, Av_mean, chi_mean, divv, redshift, tphoto,energy; 
     double dt_temp, sum_abs_est, sum_abs;
 #ifdef useDust
-    double rhoDust, rhoDustNew, rpars[2];
+    double rhoDust, rhoDustNew, rpars[24];
     int ipars[2];
 #endif
 
@@ -99,6 +99,11 @@ int doChemistryStep(double dt, double *dt_chem){
         cellAbsorption(radData, specData, numd, Temp, dr[icell], volcell, dt, absData);
 
 #ifdef useDust
+        rpars[0] = numd;
+        rpars[1] = Temp;
+        // approximate  mean molecular weight
+        rpars[2] = ch_mH*abar/(1-xH2+xHp+abundHe);
+        rpars[3] = (absData[8]+absData[9])/(dt*rho*volcell);
         ierr = dustCell(rpars, ipars, dt);
         if(ierr < 0) {
             return -1; 
