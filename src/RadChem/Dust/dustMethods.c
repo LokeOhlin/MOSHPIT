@@ -152,14 +152,14 @@ int set_vdusts(int icell){
 }
 
 #ifdef trackDustVelocities
-int get_vdust(icell){
+int get_vdust(int icell){
     int idx, ibin;
     for(idx = 0; idx < dust_nbins; idx++){
         ibin = globalToLocalIndex(idx);
         //if the simulation is keeping track of the dust velocities we take these
         ustate[icell*nvar + IDUST_START + NdustVar*idx + 2] = dust_vrel[ibin];
     }
-    return 1
+    return 1;
 }
 #endif
 
@@ -598,7 +598,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
 ///////////////////////////////////////
 // Method to transfer cell data to smaller cells
 int setBinsCell(int icell, double *Mtot){
-    int idx, ibin, iabin, graphite;
+    int idx, ibin, iabin, graphite, ierr;
     double norm, mass;
     
     *Mtot = 0;
@@ -619,7 +619,7 @@ int setBinsCell(int icell, double *Mtot){
         // current slope assuming piecewise linear dnumda
         slope[ibin]  = ustate[icell*nvar + IDUST_START + NdustVar*idx + 1];
 
-
+        
         // convert to number via total mass in cell
         
         norm = 4*M_PI/3.;
@@ -633,11 +633,12 @@ int setBinsCell(int icell, double *Mtot){
         
         number[ibin] = getNumber(slope[ibin], mass/norm, iabin);
     }
+    ierr = set_vdusts(icell);
     return 1;
 }
 
 int getBinsCell(int icell, double *Mtot){
-    int idx, ibin, iabin, graphite;
+    int idx, ibin, iabin, graphite, ierr;
     double norm, mass;
     
     *Mtot = 0;
@@ -666,6 +667,9 @@ int getBinsCell(int icell, double *Mtot){
         ustate[icell*nvar + IDUST_START + NdustVar*idx    ] = mass * norm;
         ustate[icell*nvar + IDUST_START + NdustVar*idx + 1] = slope[ibin];
     }
+#ifdef trackDustVelocites
+    ierr = set_vdusts(icell);
+#endif
     return 1;
 }
 

@@ -546,6 +546,9 @@ int setCellInit(int icell, double dustMass){
         }
         ustate[icell*nvar + IDUST_START + idx*NdustVar] = mass;
         ustate[icell*nvar + IDUST_START + idx*NdustVar+1] = Sj;
+#ifdef trackDustVelocities
+        ustate[icell*nvar + IDUST_START + idx*NdustVar+2] = 0;
+#endif
     }
 
     return 1;

@@ -116,5 +116,6 @@ int set_dadt(double *rpars, double dt){
         }
     }
 #endif
+    return 1;
 }
 #endif

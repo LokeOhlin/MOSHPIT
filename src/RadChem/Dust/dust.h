@@ -60,6 +60,14 @@ int set_dadt(double *rpars, double dt);
 int Dust_initIO();
 int Dust_outputCell(int icell, double dr);
 int Dust_output();
+
+// Methods for the dust velocity
+double get_average_vdust(int ibin, int iabin, int graphite, double *rpars, double dt);
+int update_vdust(int ibin, int iabin, int graphite, double *rpars, double dt);
+int set_vdusts(int icell);
+int get_vdust(int icell);
+
+
 #endif
 // Scratch arrays
 extern double *dadt, *dadt_fixed, *number, *slope, *Mnew, *Nnew, *Snew, *dust_vrel;

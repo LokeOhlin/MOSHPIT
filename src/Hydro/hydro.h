@@ -15,7 +15,12 @@
         #endif
     
         #define IDUST_START (ICHEM_END+1)
+
+#ifdef trackDustVelocities
+        #define NdustVar 3
+#else
         #define NdustVar 2
+#endif
         // (5 + 2*NdustBins +1) new variables : H, H2, Hp, CO, Cp, dust mass and slope, Tdust from chemistry (not related to dust module)  
         #define nvar    (IDUST_START + NdustVar * NdustBins)  
     #else
