@@ -65,6 +65,7 @@ double *dust_vrel = NULL;
 double *Mnew = NULL;
 double *Nnew = NULL;
 double *Snew = NULL;
+double *vnew = NULL;
 
 // density and average atom mass of silicates 
 double rho_s = 3.5;
@@ -382,6 +383,7 @@ int initDust(){
     Mnew         = (double *) malloc(dust_nbins*sizeof(double)); 
     Nnew         = (double *) malloc(dust_nbins*sizeof(double)); 
     Snew         = (double *) malloc(dust_nbins*sizeof(double)); 
+    vnew         = (double *) malloc(dust_nbins*sizeof(double)); 
     
     dust_vrel = (double *) malloc(dust_nbins*sizeof(double)); 
         

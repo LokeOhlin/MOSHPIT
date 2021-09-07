@@ -104,9 +104,9 @@ int update_vdust(int ibin, int iabin, int graphite, double *rpars, double dt){
     // acceleration of the dust grain due to radiation pressure
     double mass;
     if(graphite){
-        mass = aveMatom_c * Natoms[ibin] * aveMatom_c;
+        mass = aveMatom_c * Natoms[ibin];
     } else {
-        mass = aveMatom_s * Natoms[ibin] * aveMatom_s;
+        mass = aveMatom_s * Natoms[ibin];
     }
     double dust_accel = Eabs_dust/clght/mass;
 
@@ -467,6 +467,8 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                         if(dadt[ibin]*dt > abin_c[iabin]){
                             number[ibin] = 0.0;
                             slope[ibin]  = 0.0;
+                            // if all grains are gone, any new ones shouldnt have their velocity
+                            dust_vrel[ibin] = 0.0;
                         } else {
                             dt = dt_step/dust_maxSubSteps; 
                         }
@@ -506,6 +508,10 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             iabin = ibin - isilicone*(1-graphite);
             Nsum = 0;
             Msum = 0;
+
+            // We recalculate the velocity as the new momentum / mass
+            vnew[ibin] = 0;
+            
             for(ibin2 = rangeStart; ibin2 < rangeEnd; ibin2++){
                 iabin2 = ibin2 - isilicone*(1-graphite);
                 // no grains here, lets not risk grabbing any non-existent ones 
@@ -528,14 +534,19 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                 if(intN > 0 && intM >0){ 
                     Nsum = Nsum + intN; 
                     Msum = Msum + intM;
+                    // add momentum
+                    vnew[ibin] = vnew[ibin] + intM*dust_vrel[ibin2];
                 }
             }
-            
+
             if(Nsum < 0 || Msum < 0){
                 Nnew[ibin] = 0;
                 Snew[ibin] = 0;
                 Mnew[ibin] = 0;
+                vnew[ibin] = 0;
             } else {
+                // we assume that velocity stays the same across slope limiters
+                vnew[ibin] = vnew[ibin]/Msum;
 
                 Sest = getSlope(Nsum, Msum, iabin);
                 ierr = limitSlope(&Nnew[ibin], &Snew[ibin], Nsum, Sest, Msum, iabin); 
@@ -560,6 +571,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             }
             number[ibin] = Nnew[ibin];
             slope[ibin]  = Snew[ibin];
+            dust_vrel[ibin] = vnew[ibin];
             if(ibin < isilicone){
                 NumTot_cell_g += number[ibin];
             } else {

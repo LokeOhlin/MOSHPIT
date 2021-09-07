@@ -9,6 +9,7 @@ FLAGS += -DuseDust
 
 ## use relative velocity between dust and gas when calculating sputtering
 FLAGS += -DsputteringUseVelocities
+FLAGS += -DtrackDustVelocities
 
 ## track the velocity of dust grains over the simulation
 #FLAGS += trackDustVelocities
@@ -18,6 +19,9 @@ FLAGS += -DsputteringUseVelocities
 
 ## overarching flag
 FLAGS += -DuseChemistry
+
+## save the radiation fluxes of each cell in the output files
+FLAGS += -DsavePhotonFluxes
 
 ##simplified network for only using atomic hydrogen
 #FLAGS += -DTESTATOMONLY

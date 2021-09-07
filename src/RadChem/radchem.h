@@ -18,6 +18,9 @@ void setFromFile();
 
 int RadChem_initIO();
 int RadChem_output();
+#ifdef savePhotonFluxes
+int setPhotonFluxes(int icell, double *radData, double geoFact);
+#endif
 #endif
 extern double abar, mf_scale, abundHe, abundC, abundO, abundSi, ch_mH, ch_kb, ch_muC;
 extern int useRadiationPressure;
@@ -33,6 +36,10 @@ extern double dissE, ionE, ionEH2, sigmaLW, sion, sigma0, sigmaH0;
 extern double *sionH, *sionH2, *EionH, *EionH2, *EbinEdges, *Nphots, *aveEphots;
 #ifndef useDust
 extern double *dustTau_perH;
+#endif
+
+#ifdef savePhotonFluxes
+extern double *photonFluxes;
 #endif
 
 extern int nintChemPars, nrealChemPars;

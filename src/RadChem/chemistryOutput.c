@@ -51,6 +51,13 @@ int RadChem_initIO(){
     if(ierr < 0){
         return -1;
     }
+
+#ifdef savePhotonFluxes
+    rank = 2;
+    dims_2d[0] = NCELLS - 2*NGHOST;
+    dims_2d[1] = numRadiationBins;
+    ierr = my_createDataset("photonFluxes", rank, dims_2d);
+#endif
     
     //radiation bins
     rank = 1;
@@ -106,6 +113,19 @@ int RadChem_output(){
         return -1;
     }
 
+#ifdef savePhotonFluxes
+    rank = 2;
+
+    start_2d[0] = 0;
+    start_2d[1] = 0;
+    
+    stride_2d[0] = 1;
+    stride_2d[1] = 1;
+
+    count_2d[0] = NCELLS - 2*NGHOST;
+    count_2d[1] = numRadiationBins;
+    ierr = my_writeToDataset("photonFluxes", photonFluxes, rank, start_2d, stride_2d, count_2d);
     return 1;
+#endif
 }
 #endif

@@ -94,6 +94,10 @@ int doChemistryStep(double dt, double *dt_chem){
             return -1; 
         }
 #endif
+#ifdef savePhotonFluxes
+        // save incomming fluxes
+        ierr = setPhotonFluxes(icell, radData, 1/(4*M_PI*pow((rs[icell]),2)));
+#endif
         // calculate cell absorption
         
         cellAbsorption(radData, specData, numd, Temp, dr[icell], volcell, dt, absData);

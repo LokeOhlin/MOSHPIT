@@ -11,6 +11,8 @@
 #include <dust.h>
 #include <dustRadiation.h>
 #endif
+#include <hydro.h>
+
 int useRadiationPressure;
 double radEmin, radEmax;
 int numBinsSubIon;
@@ -53,6 +55,9 @@ double *sionH2;
 double *dustTau_perH;
 #endif
 
+#ifdef savePhotonFluxes
+double *photonFluxes;
+#endif
 
 void initRadiation(){
     int iEbin, readSEDFromFile;
@@ -119,7 +124,10 @@ void initRadiation(){
         setFromFile();
     } else {
         setFromStellarModel();
-    }    
+    } 
+#ifdef savePhotonFluxes
+    photonFluxes = (double *) malloc(numRadiationBins * (NCELLS - 2*NGHOST) * sizeof(double));
+#endif    
 }
 
 void setRadiationData(double *radData, double dt){
@@ -409,5 +417,14 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
     absData[11] = H2abs_est;
 }
 
+#ifdef savePhotonFluxes
+int setPhotonFluxes(int icell, double *radData, double geoFact){
+    int iEbin;
 
+    for(iEbin = 0; iEbin < numRadiationBins; iEbin++){
+        photonFluxes[icell + iEbin] = radData[iEbin]*geoFact;
+    }
+    return 1;
+}
+#endif
 

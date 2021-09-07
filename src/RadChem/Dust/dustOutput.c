@@ -88,15 +88,21 @@ int Dust_initIO(){
         return -1;
     }
     
-    ierr = my_createDataset("slope" , rank, dims_2d);
+    ierr = my_createDataset("slope", rank, dims_2d);
     if(ierr < 0){
         return -1;
     }
     
-    ierr = my_createDataset("dadt"  , rank, dims_2d);
+    ierr = my_createDataset("dadt", rank, dims_2d);
     if(ierr < 0){
         return -1;
     }
+#ifdef trackDustVelocities
+    ierr = my_createDataset("dustVelocities", rank, dims_2d);
+    if(ierr < 0){
+        return -1;
+    }
+#endif
     
     // optical depth for each cell, for each dust bin, for each radiation bin
     if(dust_useRadiation){
@@ -168,7 +174,14 @@ int Dust_outputCell(int icell, double dr){
         printf("ERROR cant write to dataset\n");
         return -1;
     }
-    // if we hhave two species, we need to do these separate to avoid ghost cells
+#ifdef trackDustVelocities
+    ierr = my_writeToDataset("dustVelocities", dust_vrel + 1, rank, start_2d, stride_2d, count_2d);
+    if(ierr < 0){
+        printf("ERROR cant write to dataset\n");
+        return -1;
+    }
+#endif
+    // if we have two species, we need to do these separate to avoid ghost cells
     if(fSi > 0.0 && fSi < 1.0){
         start_2d[0] = icell - NGHOST;
         start_2d[1] = Nabins - 2;
@@ -197,6 +210,13 @@ int Dust_outputCell(int icell, double dr){
             printf("ERROR cant write to dataset\n");
             return -1;
         }
+#ifdef trackDustVelocities
+        ierr = my_writeToDataset("dustVelocities", dust_vrel + isilicone + 1, rank, start_2d, stride_2d, count_2d);
+        if(ierr < 0){
+            printf("ERROR cant write to dataset\n");
+            return -1;
+        }
+#endif
     }
     
     if(dust_useRadiation){

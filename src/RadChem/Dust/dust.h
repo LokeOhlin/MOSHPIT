@@ -70,7 +70,7 @@ int get_vdust(int icell);
 
 #endif
 // Scratch arrays
-extern double *dadt, *dadt_fixed, *number, *slope, *Mnew, *Nnew, *Snew, *dust_vrel;
+extern double *dadt, *dadt_fixed, *number, *slope, *Mnew, *Nnew, *Snew, *vnew, *dust_vrel;
 // Values that are only dependent on bin size and are constant
 extern double *abin_e, *abin_c;
 extern double *NfactM, *NfactA;
