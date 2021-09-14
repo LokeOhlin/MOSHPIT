@@ -428,7 +428,7 @@ int initDust(){
     
     getintegerdustpar("dust_useRadiation", &dust_useRadiation);
     getintegerdustpar("dust_useSublimation", &dust_useSublimation);
-    getintegerdustpar("dust_useSputtering", &dust_useSublimation);
+    getintegerdustpar("dust_useSputtering", &dust_useSputtering);
     if(dust_useRadiation){
         
         // allocate  

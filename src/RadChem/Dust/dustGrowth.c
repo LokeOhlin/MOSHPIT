@@ -11,7 +11,7 @@
 
 int set_dadt_fixed(double *rpars){
     int idx, ibin, iabin, graphite;
-    int idt; 
+    int idt = -1; 
 
     // start by setting everything to constant (default zero)
     for(ibin = 0; ibin < dust_nbins; ibin++){
@@ -87,7 +87,7 @@ int set_dadt_fixed(double *rpars){
 
 int set_dadt(double *rpars, double dt){
     int idx, ibin, iabin, graphite;
-    int idt; 
+    int idt = -1; 
     double vdust;
     // copy over constant values
     for(idx = 0; idx < NdustBins; idx++){

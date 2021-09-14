@@ -69,9 +69,9 @@ double get_average_vdust(int ibin, int iabin, int graphite, double *rpars, doubl
     // acceleration of the dust grain due to radiation pressure
     double mass;
     if(graphite){
-        mass = aveMatom_c * Natoms[ibin] * aveMatom_c;
+        mass = Natoms[ibin] * aveMatom_c;
     } else {
-        mass = aveMatom_s * Natoms[ibin] * aveMatom_s;
+        mass = Natoms[ibin] * aveMatom_s;
     }
     double dust_accel = Eabs_dust/clght/mass;
 
@@ -80,11 +80,11 @@ double get_average_vdust(int ibin, int iabin, int graphite, double *rpars, doubl
     
     // the friction force from gas is proportional to the relative velocity
     // calculate the coefficient
-    double fric_coeff = 4*sqrt(8*boltzmann*Tgas/(M_PI*mean_mw))*rhoGas*pi_asquare[iabin]/3;
+    double fric_coeff = 4*sqrt(8*boltzmann*Tgas/(M_PI*mean_mw))*rhoGas*pi_asquare[iabin]/3/mass;
 
     // calculate the average velocity based of the solution to
     // dv/dt + fric_coeff*v = rad_accell
-    double mean_vdust = rad_accel/fric_coeff - (rad_accel/pow(fric_coeff,2) - vinit/fric_coeff)*(1-exp(-fric_coeff*dt))/dt;
+    double mean_vdust = rad_accel/fric_coeff + (rad_accel/pow(fric_coeff,2) - vinit/fric_coeff)*expm1(-fric_coeff*dt)/dt;
     return mean_vdust;
 }   
 
@@ -112,14 +112,14 @@ int update_vdust(int ibin, int iabin, int graphite, double *rpars, double dt){
 
     // relative acceleration (always positive)
     double rad_accel = fabs(dust_accel - gas_accel);
-    
+ 
     // the friction force from gas is proportional to the relative velocity
     // calculate the coefficient
     double fric_coeff = 4*sqrt(8*boltzmann*Tgas/(M_PI*mean_mw))*rhoGas*pi_asquare[iabin]/3/mass;
 
     // solution to :
     // dv/dt + fric_coeff*v = rad_accell
-    dust_vrel[ibin] = rad_accel*(1-exp(-fric_coeff*dt))/fric_coeff + vinit*exp(-fric_coeff*dt);
+    dust_vrel[ibin] = -rad_accel*expm1(-fric_coeff*dt)/fric_coeff + vinit*exp(-fric_coeff*dt);
     return 1;
 
 }
@@ -233,6 +233,7 @@ int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, in
     if(Nj <= 0 || Mj <=0){
         *Njnew = 0;
         *Sjnew = 0;
+        return 1;
     }
     // Both positive or both negative
     if( dndap*dnda > 0){
@@ -248,6 +249,8 @@ int limitSlope(double *Njnew, double *Sjnew, double Nj, double Sj, double Mj, in
         return 1;
     }
 
+    *Njnew = Nj;
+    *Sjnew = Sj;
     double Nfact_tot;
     if(dndap < 0){
         Nfact_tot = (NfactM[iabin]-SfactM[iabin]/dap/dac);
@@ -551,7 +554,6 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                 Sest = getSlope(Nsum, Msum, iabin);
                 ierr = limitSlope(&Nnew[ibin], &Snew[ibin], Nsum, Sest, Msum, iabin); 
                 Mnew[ibin] = Msum;
-
                 Ntot_new += Nnew[ibin];
                 Ntot_mid += Nsum;
                 Mtot_new += Msum;
@@ -567,7 +569,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
         NumTot_cell_g = 0;
         for(ibin = 0; ibin < dust_nbins; ibin++){
             if(Nnew[ibin] < 0){
-                printf("%d %.4e %.4e %.4e %.4e \n", ibin, Nnew[ibin], number[ibin], Snew[ibin], slope[ibin]);
+                printf("??? %d %.4e %.4e %.4e %.4e \n", ibin, Nnew[ibin], number[ibin], Snew[ibin], slope[ibin]);
             }
             number[ibin] = Nnew[ibin];
             slope[ibin]  = Snew[ibin];

@@ -77,21 +77,21 @@ int loadYieldTable(char *yieldTable){
     rewind(fptr);
     int idx = 0;
     int ida, idt, idv;
-    for(iline = 0; iline < tab_na*tab_nt; iline++){
+    for(iline = 0; iline < tab_na*tab_nv*tab_nt; iline++){
         fgets(line, 128, fptr);
         //skip header data
         while(line[0] == '#'){
             fgets(line, 128, fptr);
         }
         idt = idx%tab_nt;
-        idv = idx/tab_nt;
-        ida = ((idx - idt)/tab_nt - idv)/tab_nt;
+        idv = (idx/tab_nt)%tab_nv;
+        ida = idx/tab_nt/tab_nv;
         sscanf(line, "%lf %lf %lf %lf %lf %lf ", &agrain, &vel_g, &vel_s, &tgas, &yield_g, &yield_s);
         sput_yield_tab_agrain[ida] = agrain;
         sput_yield_tab_tgas[idt]   = tgas;
 
-        sput_yield_tab_vdust_g[idv]   = vel_g;
-        sput_yield_tab_vdust_s[idv]   = vel_s;
+        sput_yield_tab_vdust_g[ida*tab_nv + idv]   = vel_g;
+        sput_yield_tab_vdust_s[ida*tab_nv + idv]   = vel_s;
         
         sput_yield_tab_yield_g[idx]  = yield_g;  
         sput_yield_tab_yield_s[idx]  = yield_s;
@@ -102,13 +102,12 @@ int loadYieldTable(char *yieldTable){
 
     sput_yield_tab_minTgas= sput_yield_tab_tgas[0];
     sput_yield_tab_maxTgas= sput_yield_tab_tgas[tab_nt - 1];
-    
     fclose(fptr);
     return 1;
 }
 
 int loadDustSputteringTables(){
-    int ierr;
+    int ierr = 1;
 
     printf("Loading sputtering data\n");
     char *fname_q = "sputtering_yield.dat";
@@ -120,7 +119,6 @@ int loadDustSputteringTables(){
     if(ierr < 0){
         return ierr;
     }
-    
     return ierr;
 }
 
@@ -178,7 +176,7 @@ double getSputYield_vel_t(double tgas, int graphite, int ida, int idv, int *idt)
     } 
     // if above, use simple linear extrapolation (should probably be
     if(tgas > sput_yield_tab_maxTgas){
-        idxm = ida*s_tab_nt + s_tab_nt - 1;
+        idxm = ida*s_tab_nt*s_tab_nv + idv*s_tab_nt + s_tab_nt - 1;
         if(graphite){
             return sput_yield_tab_yield_g[idxm];
         } else {
@@ -222,11 +220,11 @@ double getSputYield_vel_v(double vdust, double tgas, int graphite, int ida, int 
     
     // if we are greater or equal to the last velocity, assume 0
     if(idvp + 1 == s_tab_nv){
+        printf(".... %.4e %.4e %d %d\n", vdust, vdusts[ida*s_tab_nv + s_tab_nv - 1], idvm, s_tab_nv);
         return 0;
     }
-
-    double vm = vdusts[idvm];
-    double dv = vdusts[idvp] - vdusts[idvm];
+    double vm = vdusts[ida*s_tab_nv + idvm];
+    double dv = vdusts[ida*s_tab_nv + idvp] - vm;
     
     double Ym = getSputYield_vel_t(tgas, graphite, ida, idvm, idt);
     double dY = getSputYield_vel_t(tgas, graphite, ida, idvp, idt);
@@ -269,13 +267,14 @@ double getSputYield_vel(double agrain, double vdust, double tgas, int graphite, 
 
 double get_dadt_sputtering_vel(double agrain, int ibin, int iabin, int graphite, double numd, double vdust, double tgas, int *idt){
     double prefact;
-    double yieldv = getSputYield_vel(agrain, tgas, vdust, graphite, &ida_tabSput[ibin], idt);
+    double yieldv = getSputYield_vel(agrain, vdust, tgas, graphite, &ida_tabSput[ibin], idt);
+    
     if(graphite) {
         prefact = aveMatom_c/(2*rho_c);   // 12 mH
     } else {
         prefact = aveMatom_s/(2*rho_s);   // 20 mH  
     }
-    return yieldv*prefact*numd;
+    return -yieldv*prefact*numd;
 }
 #endif
 #endif
