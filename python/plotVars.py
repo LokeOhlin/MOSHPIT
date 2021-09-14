@@ -13,6 +13,8 @@ ap.add_argument('--vars', nargs = '+',
         help = 'Variables to plot')
 ap.add_argument('--ncols', type = int, default = 3, 
         help = 'Number of columns in plot grid (ignored not enough vaiable)')
+ap.add_argument('--logx', action = 'store_true')
+ap.add_argument('--logy', action = 'store_true')
 args = ap.parse_args()
 
 def plotVar(coords, var, ax, xlim = None, ylim = None, label = None, xlabel = None, ylabel = None, color = 'navy', ls = '-'):
@@ -68,6 +70,9 @@ for f in args.f:
             plotVar(coords, var, axes[i], xlabel = r'$x$ [pc]', ylabel = varname)
         else:
             plotVar(coords, var, axes[i], ylabel = varname)
-    
+        if(args.logx):
+            axes[i].set_xscale('log')
+        if(args.logy):
+            axes[i].set_yscale('log')
     plt.subplots_adjust(bottom=0.15,top=0.95,left=0.05,right=0.95,hspace=0.1,wspace=0.3)
     plt.show()
