@@ -71,6 +71,7 @@ for f in args.f:
         ax1.legend()
         if(args.log):
             ax1.set_yscale('log')
+            ax1.set_ylim(1e-5, 1.5)
             ax1.set_xscale('log')
         
         ax1 = plt.subplot(236)
@@ -79,6 +80,7 @@ for f in args.f:
         ax1.legend() 
         if(args.log):
             ax1.set_yscale('log')
+            ax1.set_ylim(1e-6, 5e-4)
             ax1.set_xscale('log')
     
     plt.savefig("hydro"+f[-4:]+'.png')
