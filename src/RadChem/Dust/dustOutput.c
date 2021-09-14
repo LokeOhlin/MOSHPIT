@@ -157,6 +157,7 @@ int Dust_outputCell(int icell, double dr){
     count_2d[1] = Nabins-2;
    
     // + 1 to avoid ghost cells 
+    
     ierr = my_writeToDataset("number", number + 1, rank, start_2d, stride_2d, count_2d);
     if(ierr < 0){
         exit(0);
