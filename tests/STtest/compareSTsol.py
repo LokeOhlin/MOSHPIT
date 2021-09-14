@@ -7,6 +7,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import argparse
 import sys
 import CGS as cgs
+import h5py as hp
 ap=argparse.ArgumentParser()
 
 #---------------outputs-----------------------------
@@ -34,17 +35,8 @@ ST_semi = np.loadtxt('ST_semiAnalytic.dat')
 
 for f in args.f:
     time = 0
-    with open(f, 'r') as fi:
-        header = True
-        while(header):
-            line = fi.readline()
-            if line[0] == '#':
-                line = line.split(' = ')
-                if(line[0] == '# time'):
-                    time = float(line[1])
-            else:
-                header = False
-    
+    File = hp.File(f,'r')
+    time = File['Headers'].attrs.get('time') 
     # Determine scaling factors
     U_sh = 2./5. * xi0 *(Etot/(dens0*time**3))**(1./5.)
     r_sh = xi0   * (Etot*time**2/dens0)**(1./5.)
@@ -52,20 +44,24 @@ for f in args.f:
     Velnorm = 2*U_sh/(5./3.+1)
     Prenorm = 2*dens0*U_sh**2/(5./3.+1)
 
-    data = np.loadtxt(f)
+    coords = File['coordinates'][:]
+    density = File['density'][:]
+    velocity = File['velocity'][:]
+    pressure = File['pressure'][:]
+
     fig = plt.figure(figsize = (15,6))
     ax1 = plt.subplot(131)
-    ax1.plot(data[:,0], data[:,1], c = 'b')
+    ax1.plot(coords, density, c = 'b')
     ax1.plot(ST_semi[:,0]*r_sh, ST_semi[:,1]*dens0*4, c = 'r')
     ax1.set_ylabel(r"$\rho$")
 
     ax2 = plt.subplot(132)
-    ax2.plot(data[:,0], data[:,2])
+    ax2.plot(coords, velocity)
     ax2.plot(ST_semi[:,0]*r_sh, ST_semi[:,2]*Velnorm, c = 'r')
     ax2.set_ylabel(r"$v_r$")
     ax2.set_xlabel(r"$r$ [pc]")
     ax3 = plt.subplot(133)
-    ax3.plot(data[:,0], data[:,3])
+    ax3.plot(coords, pressure)
     ax3.plot(ST_semi[:,0]*r_sh, ST_semi[:,3]*Prenorm, c = 'r')
     ax3.set_ylabel(r"$P$")
 
