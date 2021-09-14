@@ -42,7 +42,6 @@ int doChemistryStep(double dt, double *dt_chem){
     sum_abs = 0;
     sum_abs_est = 0;
     for(icell = 2; icell < NCELLS-2; icell++){
-        
         //printf("%d, %.4e \n", icell, rs[icell]);
         idx  = icell*nvar;
         // Get cell state
@@ -147,11 +146,6 @@ int doChemistryStep(double dt, double *dt_chem){
         
         Habs_est  = absData[10];
         H2abs_est = absData[11];  
-
-        //printf("%.4e, ", EtotPe);
-        //printf("%.4e, ", DustEabs);
-        //printf("%.4e, ", xH2);
-        //printf("%.4e\n", kUV);
 
         // Get dust temperature for chemistry
         // Is not advected, but its set to equilibrium anyways, just need initial guess
