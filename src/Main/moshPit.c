@@ -21,6 +21,7 @@ double time, dt;
 
 int mainLoop(){
     int istep = 0, io=0, iostep=0, ierr;
+    int doOutput;
     double dt_new, dt_chem=1e99, dt_feedback, ioTime=0.0;
     time=t0;
     dt = dt_init;
@@ -49,6 +50,9 @@ int mainLoop(){
         if((istep + 1 >= iostep) || (time + dt >= ioTime)){
             // we create file here since some modules (dust) does not store much of the data, so must therefore write during the step
             ierr = createOutputFile(io);
+            doOutput = 1;
+        } else {
+            doOutput = 0;
         }
         
         //Hydro
@@ -60,7 +64,7 @@ int mainLoop(){
 #ifdef useChemistry 
         // Check if we want to write dust data
 #ifdef useDust
-        if(istep + 1 >= iostep){
+        if(doOutput){
             outputDust = 1;    
         } else {
             outputDust = 0;
@@ -79,12 +83,23 @@ int mainLoop(){
             return -1;
         }
         
+        // finalize the output
+        if(doOutput){
+            ierr = finalizeOutputFile();
+            iostep = istep + nstepOut;
+            ioTime = time + dtOut;
+            printf("next output at time = %.4e or step = %d\n",ioTime, iostep);
+            io = io + 1;
+        }
+        
         istep = istep + 1;
         time = time+dt;
         if(istep > imax){
             printf("\nMAXIMUM STEPS REACHED\n");
             break;
         }
+
+        //update time steps
 #ifdef useChemistry
         if(dt_chem<dt){
             dt = dt_chem;
@@ -95,14 +110,6 @@ int mainLoop(){
             dt = dt_feedback;
         }
 
-        // finalize the output
-        if((istep >= iostep) || (time >= ioTime)){
-            ierr = finalizeOutputFile();
-            iostep = istep + nstepOut;
-            ioTime = time + dtOut;
-            printf("next output at time = %.4e or step = %d\n",ioTime, iostep);
-            io = io + 1;
-        }
     }
     // final output
     ierr = createOutputFile(io);
