@@ -277,7 +277,8 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             // slope
             dqix = dq[idx + ivar];
             //source terms
-            Sqi  = -vel*dqix;
+            //Sqi  = -vel*dqix;
+            Sqi  = -vel*dqix - dvelx*qi;
 
             qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
             qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
@@ -294,7 +295,7 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             // slope
             dqix = dq[idx + ivar];
             //source terms
-            Sqi  = -vel*dqix;
+            Sqi  = -vel*dqix - dvelx*qi;
 
             qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
             qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
@@ -355,14 +356,14 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
     preS = (rcR*preL + rcL*preR + rcL*rcR*(velL-velR))/(rcR+rcL);
     
     // left star states
-    rhoSL  = rhoL*(SL-velL)                           /(SL-velS);
-    etotSL =     ((SL-velL)*etotL-preL*velL+preS*velS)/(SL-velS);
-    //eSL    =   eL*(SL-velL)                           /(SL-velS); 
+    rhoSL  = rhoL*(SL-velL)/(SL-velS);
+    etotSL = ((SL-velL)*etotL-preL*velL+preS*velS)/(SL-velS);
+    //eSL    =   eL*(SL-velL)/(SL-velS); 
     
     // right star states
-    rhoSR  = rhoR*(SR-velR)                           /(SR-velS);
-    etotSR =     ((SR-velR)*etotR-preR*velR+preS*velS)/(SR-velS);
-    //eSR    =   eR*(SR-velR)                           /(SR-velS); 
+    rhoSR  = rhoR*(SR-velR)/(SR-velS);
+    etotSR = ((SR-velR)*etotR-preR*velR+preS*velS)/(SR-velS);
+    //eSR    =   eR*(SR-velR)/(SR-velS); 
 
     // determine solution
     if(SL > 0){
@@ -398,21 +399,30 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
     // Advected variables
 #ifdef useChemistry
     for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
-        if(velS > 0){
-            var0 = qL[ivar];
+        if(SL > 0){
+            var0  = qL[ivar];
+        } else if(velS  > 0){
+            var0  = qL[ivar]*(SL-velL)/(SL-velS); ;
+        } else if(SR > 0){
+            var0  = qR[ivar]*(SR-velR)/(SR-velS);
         } else {
-            var0 = qR[ivar];
-        }   
+            var0  = qR[ivar];
+        }
         flux[ivar] = var0*vel0;
     }
 #endif
 #ifdef useDust
     for(ivar = IDUST_START; ivar < nvar; ivar++){
-        if(velS > 0){
-            var0 = qL[ivar];
+        if(SL > 0){
+            var0  = qL[ivar];
+        } else if(velS  > 0){
+            var0  = qL[ivar]*(SL-velL)/(SL-velS); ;
+        } else if(SR > 0){
+            var0  = qR[ivar]*(SR-velR)/(SR-velS);
         } else {
-            var0 = qR[ivar];
-        }   
+            var0  = qR[ivar];
+        }
+
         flux[ivar] = var0*vel0;
     }
 #endif
