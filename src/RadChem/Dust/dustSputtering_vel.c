@@ -15,9 +15,9 @@ double *sput_yield_tab_yield_g  = NULL;
 double *sput_yield_tab_yield_s  = NULL;
 
 
-int s_tab_na;
-int s_tab_nt;
-int s_tab_nv;
+int sput_tab_na;
+int sput_tab_nt;
+int sput_tab_nv;
 
 double sput_yield_tab_maxAgrain;
 double sput_yield_tab_minAgrain;
@@ -70,9 +70,9 @@ int loadYieldTable(char *yieldTable){
     sput_yield_tab_yield_g  = (double *) malloc(tab_na*tab_nt*tab_nv*sizeof(double)); 
     sput_yield_tab_yield_s  = (double *) malloc(tab_na*tab_nt*tab_nv*sizeof(double));    
     
-    s_tab_na = tab_na;
-    s_tab_nt = tab_nt;
-    s_tab_nv = tab_nv;
+    sput_tab_na = tab_na;
+    sput_tab_nt = tab_nt;
+    sput_tab_nv = tab_nv;
     // rewind, should not be necesserary but looks cleaner
     rewind(fptr);
     int idx = 0;
@@ -130,9 +130,9 @@ int getSputYield_ida(double agrain, int graphite){
     if(agrain < sput_yield_tab_minAgrain){
         ida  = 0;
     } else if(agrain >= sput_yield_tab_maxAgrain){
-        ida  = s_tab_na - 2;
+        ida  = sput_tab_na - 2;
     } else{
-        ida = binarySearch(agrain, sput_yield_tab_agrain, s_tab_na);
+        ida = binarySearch(agrain, sput_yield_tab_agrain, sput_tab_na);
     }
     return ida;
 }
@@ -140,9 +140,9 @@ int getSputYield_ida(double agrain, int graphite){
 int getSputYield_idt(double tgas, int graphite){
     int idt;
     if(tgas >= sput_yield_tab_maxTgas){
-        idt  = s_tab_nt-2;
+        idt  = sput_tab_nt-2;
     } else {
-        idt = binarySearch(tgas, sput_yield_tab_tgas, s_tab_nt);
+        idt = binarySearch(tgas, sput_yield_tab_tgas, sput_tab_nt);
     }
     return idt;
 }
@@ -156,10 +156,10 @@ int getSputYield_idv(double vdust, int ida, int graphite) {
         vdusts = sput_yield_tab_vdust_s;
     }
 
-    if(vdust >= vdusts[ida*s_tab_nv + s_tab_nv - 1]){
-        idv = s_tab_nv - 2;
+    if(vdust >= vdusts[ida*sput_tab_nv + sput_tab_nv - 1]){
+        idv = sput_tab_nv - 2;
     } else {
-        idv = binarySearch(vdust, vdusts + ida*s_tab_nv, s_tab_nv);
+        idv = binarySearch(vdust, vdusts + ida*sput_tab_nv, sput_tab_nv);
     }
     return idv;
 
@@ -176,7 +176,7 @@ double getSputYield_vel_t(double tgas, int graphite, int ida, int idv, int *idt)
     } 
     // if above, use simple linear extrapolation (should probably be
     if(tgas > sput_yield_tab_maxTgas){
-        idxm = ida*s_tab_nt*s_tab_nv + idv*s_tab_nt + s_tab_nt - 1;
+        idxm = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt + sput_tab_nt - 1;
         if(graphite){
             return sput_yield_tab_yield_g[idxm];
         } else {
@@ -191,8 +191,8 @@ double getSputYield_vel_t(double tgas, int graphite, int ida, int idv, int *idt)
     }
     idtp = idtm + 1;
 
-    idxm = ida*s_tab_nt*s_tab_nv + idv*s_tab_nt + idtm;
-    idxp = ida*s_tab_nt*s_tab_nv + idv*s_tab_nt + idtp;
+    idxm = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt + idtm;
+    idxp = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt + idtp;
 
     double tm = sput_yield_tab_tgas[idtm];
     double dt = sput_yield_tab_tgas[idtp] - tm;
@@ -219,12 +219,12 @@ double getSputYield_vel_v(double vdust, double tgas, int graphite, int ida, int 
     idvp = idvm + 1;
     
     // if we are greater or equal to the last velocity, assume 0
-    if(idvp + 1 == s_tab_nv){
-        printf(".... %.4e %.4e %d %d\n", vdust, vdusts[ida*s_tab_nv + s_tab_nv - 1], idvm, s_tab_nv);
+    if(idvp + 1 == sput_tab_nv){
+        printf(".... %.4e %.4e %d %d\n", vdust, vdusts[ida*sput_tab_nv + sput_tab_nv - 1], idvm, sput_tab_nv);
         return 0;
     }
-    double vm = vdusts[ida*s_tab_nv + idvm];
-    double dv = vdusts[ida*s_tab_nv + idvp] - vm;
+    double vm = vdusts[ida*sput_tab_nv + idvm];
+    double dv = vdusts[ida*sput_tab_nv + idvp] - vm;
     
     double Ym = getSputYield_vel_t(tgas, graphite, ida, idvm, idt);
     double dY = getSputYield_vel_t(tgas, graphite, ida, idvp, idt);

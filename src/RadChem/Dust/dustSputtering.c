@@ -13,8 +13,8 @@ double *sput_yield_tab_yield_g  = NULL;
 double *sput_yield_tab_yield_s  = NULL;
 
 
-int s_tab_na;
-int s_tab_nt;
+int sput_tab_na;
+int sput_tab_nt;
 
 double sput_yield_tab_maxAgrain;
 double sput_yield_tab_minAgrain;
@@ -59,8 +59,8 @@ int loadYieldTable(char *yieldTable){
     sput_yield_tab_yield_g  = (double *) malloc(tab_na*tab_nt*sizeof(double)); 
     sput_yield_tab_yield_s  = (double *) malloc(tab_na*tab_nt*sizeof(double));    
     
-    s_tab_na = tab_na;
-    s_tab_nt = tab_nt;
+    sput_tab_na = tab_na;
+    sput_tab_nt = tab_nt;
     // rewind, should not be necesserary but looks cleaner
     rewind(fptr);
     int idx = 0;
@@ -115,9 +115,9 @@ int getSputYield_ida(double agrain, int graphite){
     if(agrain < sput_yield_tab_minAgrain){
         ida  = 0;
     } else if(agrain >= sput_yield_tab_maxAgrain){
-        ida  = s_tab_na - 2;
+        ida  = sput_tab_na - 2;
     } else{
-        ida = binarySearch(agrain, sput_yield_tab_agrain, s_tab_na);
+        ida = binarySearch(agrain, sput_yield_tab_agrain, sput_tab_na);
     }
     return ida;
 }
@@ -125,9 +125,9 @@ int getSputYield_ida(double agrain, int graphite){
 int getSputYield_idt(double tgas, int graphite){
     int idt;
     if(tgas >= sput_yield_tab_maxTgas){
-        idt  = s_tab_nt-2;
+        idt  = sput_tab_nt-2;
     } else {
-        idt = binarySearch(tgas, sput_yield_tab_tgas, s_tab_nt);
+        idt = binarySearch(tgas, sput_yield_tab_tgas, sput_tab_nt);
     }
     return idt;
 }
@@ -143,7 +143,7 @@ double getSputYield_t(double tgas, int graphite, int ida, int *idt){
     } 
     // if above, use simple linear extrapolation (should probably be
     if(tgas > sput_yield_tab_maxTgas){
-        idxm = ida*s_tab_nt + s_tab_nt - 1;
+        idxm = ida*sput_tab_nt + sput_tab_nt - 1;
         if(graphite){
             return sput_yield_tab_yield_g[idxm];
         } else {
@@ -158,8 +158,8 @@ double getSputYield_t(double tgas, int graphite, int ida, int *idt){
     }
     idtp = idtm + 1;
 
-    idxm = ida*s_tab_nt + idtm;
-    idxp = ida*s_tab_nt + idtp;
+    idxm = ida*sput_tab_nt + idtm;
+    idxp = ida*sput_tab_nt + idtp;
 
     double tm = sput_yield_tab_tgas[idtm];
     double dt = sput_yield_tab_tgas[idtp] - tm;
