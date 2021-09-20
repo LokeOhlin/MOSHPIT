@@ -14,7 +14,7 @@ int getCFL(double *cfl){
         cfl[0] = 1e99;
         return 1;
     }
-    cfl[0]=0; // initially inverted 
+    *cfl=0; // initially inverted 
     for(icell = 0; icell < NCELLS; icell++){
         rho = ustate[icell*nvar];
         rhoinv = 1/rho;
@@ -24,9 +24,9 @@ int getCFL(double *cfl){
         
         cs = sqrt(adi*pre);
         wspeed = cs + fabs(vel);
-        cfl[0] = fmax(wspeed/dr[icell], cfl[0]);
+        *cfl = fmax(wspeed/dr[icell], *cfl);
     }
-    cfl[0] = courant_number/cfl[0];
+    *cfl = courant_number/cfl[0];
     return 1;
 }
 
@@ -123,7 +123,7 @@ int toPrimitive(){
         pstate[idx + 2]= rho * eint * (adi-1);
 #ifdef useChemistry
         // copy over mass fractions
-        for(ivar = ICHEM_START; ivar < ICHEM_END + 1; ivar++){
+        for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
             pstate[idx + ivar] = ustate[idx + ivar];
         }
 #endif 
@@ -249,19 +249,10 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
 
             // add geometric source terms to left and right states
             qM[idx]     = qM[idx]     - rho*vel*twooR * 0.5*dt;
-            //qM[idx + 1] = qM[idx + 1] - pre/rho  * 0.5*dt;
-            qM[idx + 2] = qM[idx + 2] - pre*vel*twooR  * 0.5*dt;
+            qM[idx + 2] = qM[idx + 2] - pre*vel*twooR * 0.5*dt;
             
             qP[idx]     = qP[idx]     - rho*vel*twooR * 0.5*dt;
-            //qP[idx + 1] = qP[idx + 1] - pre/rho  * 0.5*dt;
-            qP[idx + 2] = qP[idx + 2] - pre*vel*twooR* 0.5*dt;
-
-            //if(fabs(drm) < dr[icell]/2){ // No velocity at zero
-            //    qM[idx + 1 ] = 0;
-            //}
-            //if(fabs(drp) <= dr[icell]/2){ // No velocity at zero
-            //    qP[idx + 1 ] = 0;
-            //}
+            qP[idx + 2] = qP[idx + 2] - pre*vel*twooR * 0.5*dt;
         }
         if(qP[idx] <= 0){
             printf("\n idx = %d \n", icell);
@@ -277,7 +268,6 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             // slope
             dqix = dq[idx + ivar];
             //source terms
-            //Sqi  = -vel*dqix;
             Sqi  = -vel*dqix - dvelx*qi;
 
             qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
@@ -285,7 +275,7 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             // Geometric source term same as for density
             if(geometry == 1){
                 qM[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
-                qP[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
+                qP[idx + ivar] = qP[idx + ivar] - qi*vel*twooR * 0.5 * dt;
             }
         }
 #ifdef useDust
@@ -302,7 +292,7 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             // Geometric source term same as for density
             if(geometry == 1){
                 qM[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
-                qP[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
+                qP[idx + ivar] = qP[idx + ivar] - qi*vel*twooR * 0.5 * dt;
             }
         }
 #endif
@@ -472,9 +462,6 @@ int getFluxes(double *qM, double *qP, double *fluxes){
         // save fluxes
         idx = iinter*nFluxVar;
         for(ivar = 0; ivar < nFluxVar; ivar++){
-            //if(iinter == 0){
-            //    printf("%.4e %.4e %.4e\n", flux[ivar], qL[ivar], qR[ivar]);
-            //}
             fluxes[idx+ivar] = flux[ivar];
         }
     }
@@ -546,11 +533,7 @@ int doHydroStep(double dt){
                 Ethermal = ustate[idx + 2] - 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
                 // predicted half step pressure of at cell center
                 presStar = (surfp*qP[idx + 2] + surfm*qM[idx + 2])/(surfm+surfp);
-                //printf("icell %d \n", icell);
-                //printf("Ethermal %.4e dEdt %.4e \n", Ethermal, (fluxes[ifn + nvar]*surfm - fluxes[ifp+ivar]*surfp)*dt/vol + presStar*(fluxes[ifn + nvar + 1]*surfm - fluxes[ifp+nvar + 1]*surfp)*dt/vol);
-                //printf("fluxes %.4e %.4e %.4e %.4e \n", fluxes[ifn + nvar], fluxes[ifp + nvar], fluxes[ifn + nvar + 1], fluxes[ifp + nvar + 1]);
-                //printf("dens %.4e mom %.4e ener %.4e\n", ustate[idx], ustate[idx+1], ustate[idx+2]);
-                //printf("\n");
+                
                 Ethermal = Ethermal +            (fluxes[ifn + nvar]*surfm     - fluxes[ifp + nvar]*surfp)*dt/vol;
                 Ethermal = Ethermal + presStar * (fluxes[ifn + nvar + 1]*surfm - fluxes[ifp + nvar + 1]*surfp)*dt/vol;
                 Ethermal = fmax(Ethermal, 1e-40);
@@ -558,9 +541,7 @@ int doHydroStep(double dt){
             
             for(ivar = 0; ivar<nvar; ivar++){
                 unew = ustate[idx+ivar]+(fluxes[ifn+ivar]*surfm-fluxes[ifp+ivar]*surfp)*dt/vol;
-                //if(icell < 10 && ivar < 3){
-                //    printf("%d %d %.4e %.4e \n", icell, ivar, unew, ustate[idx+ivar]);
-                //}
+                
                 if((ivar==0 || ivar==2) && unew<0 ){
                     printf("\nNEGATIVE IVAR = %d\n",ivar);
                     printf("u-1 = %.4e, u=%.4e , u+1=%.4e \n",ustate[(icell-1)*nvar+ivar], ustate[(icell)*nvar+ivar], ustate[(icell+1)*nvar+ivar]);
@@ -576,7 +557,7 @@ int doHydroStep(double dt){
             // add geometric source terms
             if(geometry == 1){
                 // Adjusted pressure such that P = constant & u = 0 => static
-                // qstate still not updated
+                // pstate still not updated so we can freely use
                 smom = (surfp - surfm) * pstate[idx + 2]/vol;
                 //smom = 2*qstate[idx + 2]/rs[icell];
                 ustate[idx + 1] = ustate[idx + 1] + smom*dt;
