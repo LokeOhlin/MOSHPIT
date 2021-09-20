@@ -46,3 +46,7 @@ extern int nintChemPars, nrealChemPars;
 extern int_list_t *chemIPars;
 extern real_list_t *chemDPars;
 extern double *chemBuff;
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
