@@ -70,9 +70,10 @@ extern double *dr;
 extern double *varBuff;
 int Hydro_initIO();
 int Hydro_output();
+
+extern int nrealHydroPars, nintHydroPars;
+extern int_list_t *hydroIPars;
+extern real_list_t *hydroDPars;
 #endif
 
-int nrealHydroPars, nintHydroPars;
-int_list_t *hydroIPars;
-real_list_t *hydroDPars;
 
