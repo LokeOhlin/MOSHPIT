@@ -131,8 +131,8 @@ int set_vdusts(int icell){
     for(idx = 0; idx < dust_nbins; idx++){
         ibin = globalToLocalIndex(idx);
 #ifdef trackDustVelocities
-        //if the simulation is keeping track of the dust velocities we take these
-        dust_vrel[ibin] = ustate[icell*nvar + IDUST_START + NdustVar*idx + 2];
+        //if the simulation is keeping track of the dust velocities we take these. Saved as momentum density
+        dust_vrel[ibin] = ustate[icell*nvar + IDUST_START + NdustVar*idx + 2]/ustate[icell*nvar + IDUST_START + NdustVar*idx];
 #else
         // otherwise set this to zero
         dust_vrel[ibin] = 0.0;
@@ -157,7 +157,7 @@ int get_vdust(int icell){
     for(idx = 0; idx < dust_nbins; idx++){
         ibin = globalToLocalIndex(idx);
         //if the simulation is keeping track of the dust velocities we take these
-        ustate[icell*nvar + IDUST_START + NdustVar*idx + 2] = dust_vrel[ibin];
+        ustate[icell*nvar + IDUST_START + NdustVar*idx + 2] = dust_vrel[ibin] * ustate[icell*nvar + IDUST_START + NdustVar*idx];
     }
     return 1;
 }
@@ -682,7 +682,7 @@ int getBinsCell(int icell, double *Mtot){
         ustate[icell*nvar + IDUST_START + NdustVar*idx + 1] = slope[ibin];
     }
 #ifdef trackDustVelocites
-    ierr = set_vdusts(icell);
+    ierr = get_vdusts(icell);
 #endif
     return 1;
 }
