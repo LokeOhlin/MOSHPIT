@@ -53,8 +53,19 @@ Thumbs.db
 *.mod
 bin/
 moshpit
+tools/moshpit_utils/moshpit_utils/test_utils/DustyWave/dustywaves.cpython-39-x86_64-linux-gnu.so
+
+Config
 
 **output_*
 **dustOut_*
 **.png
 **log
+
+# test rundirectories
+tests/*/rundir
+
+# pip stuff
+tools/moshpit_utils/LICENSE
+tools/moshpit_utils/moshpit_utils.egg-info/
+
