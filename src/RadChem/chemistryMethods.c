@@ -41,7 +41,7 @@ int doChemistryStep(double dt, double *dt_chem){
     dt_chem[0] = 1e99;
     sum_abs = 0;
     sum_abs_est = 0;
-    for(icell = 2; icell < NCELLS-2; icell++){
+    for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
         //printf("%d, %.4e \n", icell, rs[icell]);
         idx  = icell*nvar;
         // Get cell state
@@ -102,17 +102,28 @@ int doChemistryStep(double dt, double *dt_chem){
         cellAbsorption(radData, specData, numd, Temp, dr[icell], volcell, dt, absData);
 
 #ifdef useDust
-        rpars[0] = numd;
-        rpars[1] = Temp;
+        rpars[0] = rho;
+        rpars[1] = numd;
+        rpars[2] = Temp;
+        
         // approximate  mean molecular weight
-        rpars[2] = ch_mH*abar/(1-xH2+xHp+abundHe);
-        rpars[3] = (absData[8]+absData[9])/(dt*rho*volcell);
+        rpars[3] = ch_mH*abar/(1-xH2+xHp+abundHe);
+        
+        // gas velocity and acceleration from radiation pressure
+        rpars[4] = vel;
+        rpars[5] = (absData[8]+absData[9])/(dt*rho*volcell);
+        
+        // sound speed in cell
+        rpars[6] = sqrt(pres * adi);
+        
         ierr = dustCell(rpars, ipars, dt);
+        
         if(ierr < 0) {
             return -1; 
         }
         if(outputDust){
-            ierr = Dust_outputCell(icell, dr[icell]);
+            // If we want to output this step, we need to write the dadt's of the dust here
+            ierr = Dust_outputCell_dadt(icell, dr[icell]);
             if(ierr < 0) {
                 return -1; 
             }
@@ -122,7 +133,9 @@ int doChemistryStep(double dt, double *dt_chem){
             return -1; 
         }
 #endif
-
+        if(noChemistry == 1){
+            continue;
+        }
         //exit(0);
         // get absorption variables
         //make into flux. take value at centre of cell

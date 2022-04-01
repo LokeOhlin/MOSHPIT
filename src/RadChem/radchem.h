@@ -34,6 +34,7 @@ extern double radEmin;
 extern double radEmax;
 extern double dissE, ionE, ionEH2, sigmaLW, sion, sigma0, sigmaH0;
 extern double *sionH, *sionH2, *EionH, *EionH2, *EbinEdges, *Nphots, *aveEphots;
+extern int noChemistry;
 #ifndef useDust
 extern double *dustTau_perH;
 #endif

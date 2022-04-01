@@ -24,14 +24,19 @@ int mainLoop(){
     int doOutput;
     double dt_new, dt_chem=1e99, dt_feedback, ioTime=0.0;
     time=t0;
-    dt = dt_init;
     // First output
+    timeOut = t0;
     ierr = createOutputFile(io);
     ierr = finalizeOutputFile();
     io = io + 1;
-    iostep = iostep + nstepOut;
+    if(nstepOut > 0){
+        iostep = iostep + nstepOut;
+    } else {
+        iostep = -1;
+    }
     ioTime = ioTime + dtOut;
 
+    dt = dt_init;
     while( time < tend ){
         // check timestep
         ierr = getCFL(&dt_new);
@@ -47,20 +52,17 @@ int mainLoop(){
         }
         printf("step %d time = %.4e dt = %.4e || dt_CFL = %.4e  dt_chem= %.4e\n", istep, time ,dt, dt_new,dt_chem);
         // check if we are outputing on this step
-        if((istep + 1 >= iostep) || (time + dt >= ioTime)){
+        if((istep + 1 >= iostep && iostep > 0) || (time + dt >= ioTime)){
             // we create file here since some modules (dust) does not store much of the data, so must therefore write during the step
+            timeOut = time + dt;
             ierr = createOutputFile(io);
             doOutput = 1;
         } else {
             doOutput = 0;
         }
-        
-        //Hydro
-        ierr = doHydroStep(dt);
-        if(ierr < 0){
-            printf("error in hydro\n");
-            return -1;
-        }
+
+
+        // Source Terms
 #ifdef useChemistry 
         // Check if we want to write dust data
 #ifdef useDust
@@ -69,7 +71,6 @@ int mainLoop(){
         } else {
             outputDust = 0;
         }
-
 #endif       
         // Chemistry
         ierr = doChemistryStep(dt, &dt_chem);
@@ -82,11 +83,30 @@ int mainLoop(){
         if(ierr < 0){
             return -1;
         }
+#ifdef useDust
+#ifdef useDustDynamics
+#ifndef growthUpdateVelocities
+        // Calucalte effect of dust gas drag. NOTE: if the above source terms stars to be affected by the relative velocites
+        // we should do a predictore step as well
+        ierr = doDustGasDrag(dt);
+#endif
+#endif
+#endif
+
+
+        //Hydro
+        ierr = doHydroStep(dt);
+        if(ierr < 0){
+            printf("error in hydro\n");
+            return -1;
+        }
         
         // finalize the output
         if(doOutput){
             ierr = finalizeOutputFile();
-            iostep = istep + nstepOut;
+            if(nstepOut > 0){
+                iostep = istep + nstepOut;
+            }
             ioTime = time + dtOut;
             printf("next output at time = %.4e or step = %d\n",ioTime, iostep);
             io = io + 1;
@@ -94,11 +114,13 @@ int mainLoop(){
         
         istep = istep + 1;
         time = time+dt;
-        if(istep > imax){
-            printf("\nMAXIMUM STEPS REACHED\n");
-            break;
+        if(imax > 0){
+            if(istep > imax){
+                printf("\nMAXIMUM STEPS REACHED\n");
+                break;
+                
+            }
         }
-
         //update time steps
 #ifdef useChemistry
         if(dt_chem<dt){
@@ -112,6 +134,7 @@ int mainLoop(){
 
     }
     // final output
+    timeOut = time;
     ierr = createOutputFile(io);
     ierr = finalizeOutputFile();
     io = io + 1;

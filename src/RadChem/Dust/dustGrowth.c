@@ -37,8 +37,8 @@ int set_dadt_fixed(double *rpars){
     // Start with sputtering if fixed over timestep
 #ifndef sputteringUseVelocities
     if(dust_useSputtering){
-        double numd = rpars[0];
-        double Tgas = rpars[1];
+        double numd = rpars[1];
+        double Tgas = rpars[2];
         // only over physical range
         for(idx = 0; idx < NdustBins; idx++){
             ibin = globalToLocalIndex(idx);
@@ -98,8 +98,8 @@ int set_dadt(double *rpars, double dt){
     // Start with sputtering 
 #ifdef sputteringUseVelocities
     if(dust_useSputtering){
-        double numd = rpars[0];
-        double Tgas = rpars[1];
+        double numd = rpars[1];
+        double Tgas = rpars[2];
         // only over physical range
         for(idx = 0; idx < NdustBins; idx++){
             ibin = globalToLocalIndex(idx);
@@ -111,7 +111,6 @@ int set_dadt(double *rpars, double dt){
                 iabin = ibin - isilicone;
             }
 
-            vdust = get_average_vdust(ibin, iabin, graphite, rpars, dt);
             dadt[ibin] += get_dadt_sputtering_vel(abin_c[iabin], ibin, iabin, graphite, numd, vdust, Tgas, &idt);
         }
     }

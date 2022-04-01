@@ -16,11 +16,11 @@
     
         #define IDUST_START (ICHEM_END+1)
 
-#ifdef trackDustVelocities
-        #define NdustVar 3
-#else
-        #define NdustVar 2
-#endif
+        #if defined growthUpdateVelocities || defined useDustDynamics
+            #define NdustVar 3
+        #else
+            #define NdustVar 2
+        #endif
         // (5 + 2*NdustBins +1) new variables : H, H2, Hp, CO, Cp, dust mass and slope, Tdust from chemistry (not related to dust module)  
         #define nvar    (IDUST_START + NdustVar * NdustBins)  
     #else
@@ -42,7 +42,9 @@ int initHydro();
 int init_domain();
 
 extern int useHydro;
-
+// ISOTHEMRMAL
+extern int isothermal;
+extern double cs_init;
 // GRID GEOMETRY
 extern int NGHOST; 
 extern int NCELLS; 
@@ -59,6 +61,7 @@ extern double bdensR, bvelR, benerR;
 extern double adi;
 extern double courant_number;
 extern double hy_ethresh;
+extern double roe_p;
 
 //Pointers to state arrays
 extern double *ustate;

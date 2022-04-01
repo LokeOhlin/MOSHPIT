@@ -15,7 +15,7 @@ double *chemBuff = NULL;
 
 int nrealChemPars = 26;
 real_list_t *chemDPars = NULL;
-int nintChemPars = 14;
+int nintChemPars = 15;
 int_list_t *chemIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
@@ -30,6 +30,7 @@ double ch_muC  = 12.011;
 double ch_muO  = 15.9994;
 double ch_muSi = 28.0855;
 double ch_kb   = 1.38065e-16;
+int noChemistry;
 // set default parameter lists 
 int setChemistryPars(){
     // Allocate spaces
@@ -79,6 +80,7 @@ int setChemistryPars(){
     strcpy(chemIPars[11].name, "numBinsSubIon");       chemIPars[11].value = 30;
     strcpy(chemIPars[12].name, "numBinsFullIon");      chemIPars[12].value = 10;
     strcpy(chemIPars[13].name, "readSEDFromFile");      chemIPars[13].value = 0;
+    strcpy(chemIPars[14].name, "noChemistry");      chemIPars[14].value = 0;
     return 1;
 }
 
@@ -128,20 +130,27 @@ void getintegerchemistrypar(char *name, int *value){
 }
 
 int initChemistry(){
+    printf("ch_abundHe\n");
     getrealchemistrypar("ch_abundHe", &abundHe);
+    printf("ch_abundc\n");
     getrealchemistrypar("ch_abundC", &abundC);
+    printf("ch_abundo\n");
     getrealchemistrypar("ch_abundO", &abundO);
+    printf("ch_abundsi\n");
     getrealchemistrypar("ch_abundSi",&abundSi);
-    
+    printf("ch_nochem\n");
+    getintegerchemistrypar("noChemistry", &noChemistry);
     abar = 1.0 + abundHe*ch_muHe + abundC*ch_muC + abundO*ch_muO + abundSi*ch_muSi ;
     mf_scale = 1.0 + abundC*ch_muC;
     
     // initialize buffer array for output
+    printf("chemBuff %d %d %ld\n", NCELLS, NGHOST, (NCELLS - 2*NGHOST)*5 * sizeof(double));
     chemBuff = (double *) malloc( (NCELLS - 2*NGHOST)*5 * sizeof(double)); 
     
     //Call intit for fortran functions
     Chemistry_FortranInit();
     #ifdef useDust 
+        printf("\ncalling initDust\n");
         //Init Dust
         initDust();
     #endif    

@@ -59,18 +59,21 @@ int set_dadt(double *rpars, double dt);
 
 int Dust_initIO();
 int Dust_outputCell(int icell, double dr);
+int Dust_outputCell_dadt(int icell, double dr);
 int Dust_output();
 
 // Methods for the dust velocity
-double get_average_vdust(int ibin, int iabin, int graphite, double *rpars, double dt);
-int update_vdust(int ibin, int iabin, int graphite, double *rpars, double dt);
-int set_vdusts(int icell);
-int get_vdust(int icell);
+int dustCalcGasDrag(double rho, double *vel, double cs, double dt);
+int dustCalcRadPres(double dt);
+int doDustGasDrag(double dt);
 
-
+// Methods for dust transport
+int getRiemannStates_dust(double *dq, double *qP, double *qM, double dt, double dtdx, int icell);
+int getRoeFlux_dust(double *qL, double *qR, double *am, double *a0, double *ap, double *UL, double *UR, double dxdtl, double dxdtr, double *flux);
+int getFluxes_dust(double *qM, double *qP, double *fluxes, double dt);
 #endif
 // Scratch arrays
-extern double *dadt, *dadt_fixed, *number, *slope, *Mnew, *Nnew, *Snew, *vnew, *dust_vrel;
+extern double *dadt, *dadt_fixed, *number, *slope, *velocity, *Mnew, *Nnew, *Snew, *vnew, *dust_vrel, *dragCoef;
 // Values that are only dependent on bin size and are constant
 extern double *abin_e, *abin_c;
 extern double *NfactM, *NfactA;
@@ -110,6 +113,11 @@ extern int dust_upperBound_pileUp;
 extern hid_t dustOutput;
 extern int outputDust;
 extern int outputNum;
+
+// options for drag
+extern double drag_dtmax_fact;
+extern int drag_mode;
+extern double drag_const, drag_par;
 
 extern int nrealDustPars, nintDustPars;
 extern real_list_t *dustDPars;

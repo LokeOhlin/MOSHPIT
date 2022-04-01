@@ -97,7 +97,7 @@ int Dust_initIO(){
     if(ierr < 0){
         return -1;
     }
-#ifdef trackDustVelocities
+#if defined useDustDynamics || defined  growthUpdateVelocities
     ierr = my_createDataset("dustVelocities", rank, dims_2d);
     if(ierr < 0){
         return -1;
@@ -140,6 +140,38 @@ int Dust_initIO(){
     return 1;
 }
 
+int Dust_outputCell_dadt(int icell, double dr){
+    // We dont want to recalculate the growth rate so this is saved during the chemistry step
+    hsize_t start_2d[2], stride_2d[2], count_2d[2];
+    int ierr, rank;
+
+    rank = 2;
+    start_2d[0] = icell - NGHOST;
+    start_2d[1] = 0;
+    
+    stride_2d[0] = 1;
+    stride_2d[1] = 1;
+
+    count_2d[0] = 1;
+    count_2d[1] = Nabins-2;
+   
+    // + 1 to avoid ghost cells 
+    ierr = my_writeToDataset("dadt"  , dadt   + 1, rank, start_2d, stride_2d, count_2d);
+    if(ierr < 0){
+        printf("ERROR cant write to dataset\n");
+        return -1;
+    }
+    
+    // if we have two species, we need to do these separate to avoid ghost cells
+    if(fSi > 0.0 && fSi < 1.0){
+        ierr = my_writeToDataset("dadt"  , dadt   + isilicone + 1, rank, start_2d, stride_2d, count_2d);
+        if(ierr < 0){
+            printf("ERROR cant write to dataset\n");
+            return -1;
+        }
+    }
+    return 1;
+}
 int Dust_outputCell(int icell, double dr){
     // start with grain distribution and evaporation rates
     hsize_t start_2d[2], stride_2d[2], count_2d[2];
@@ -157,7 +189,6 @@ int Dust_outputCell(int icell, double dr){
     count_2d[1] = Nabins-2;
    
     // + 1 to avoid ghost cells 
-    
     ierr = my_writeToDataset("number", number + 1, rank, start_2d, stride_2d, count_2d);
     if(ierr < 0){
         exit(0);
@@ -170,13 +201,8 @@ int Dust_outputCell(int icell, double dr){
         return -1;
     }
     
-    ierr = my_writeToDataset("dadt"  , dadt   + 1, rank, start_2d, stride_2d, count_2d);
-    if(ierr < 0){
-        printf("ERROR cant write to dataset\n");
-        return -1;
-    }
-#ifdef trackDustVelocities
-    ierr = my_writeToDataset("dustVelocities", dust_vrel + 1, rank, start_2d, stride_2d, count_2d);
+#if defined useDustDynamics || defined growthUpdateVelocities
+    ierr = my_writeToDataset("dustVelocities", velocity + 1, rank, start_2d, stride_2d, count_2d);
     if(ierr < 0){
         printf("ERROR cant write to dataset\n");
         return -1;
@@ -211,8 +237,8 @@ int Dust_outputCell(int icell, double dr){
             printf("ERROR cant write to dataset\n");
             return -1;
         }
-#ifdef trackDustVelocities
-        ierr = my_writeToDataset("dustVelocities", dust_vrel + isilicone + 1, rank, start_2d, stride_2d, count_2d);
+#if defined useDustDynamics || defined growthUpdateVelocities
+        ierr = my_writeToDataset("dustVelocities", velocity + isilicone + 1, rank, start_2d, stride_2d, count_2d);
         if(ierr < 0){
             printf("ERROR cant write to dataset\n");
             return -1;
@@ -246,8 +272,21 @@ int Dust_outputCell(int icell, double dr){
 
 }
 
-//Dust is done during step
+
 int Dust_output(){
+    int icell, ierr;
+    double rhoDust;
+    //Loop over cells. set internal arrays and save variables to output
+    for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
+        ierr = setBinsCell(icell, &rhoDust);
+        if(ierr < 0) {
+            return -1; 
+        }
+        ierr = Dust_outputCell(icell, dr[icell]);
+        if(ierr < 0) {
+            return -1; 
+        }
+    }    
     return 1;
 }
 

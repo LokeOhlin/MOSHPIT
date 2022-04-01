@@ -12,7 +12,7 @@ real_list_t *RTDPars = NULL;
 int nintRTPars = 1;
 int_list_t *RTIPars = NULL;
 
-double t0, tend, dt_init, dt_max;
+double t0, tend, dt_init, dt_max, timeOut;
 int imax;
 
 // set default parameters

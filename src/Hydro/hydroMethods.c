@@ -5,106 +5,124 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <hydro.h>
+#ifdef useDust
+#include <dust.h>
+#endif
+
 
 
 int getCFL(double *cfl){
-    int icell;
+    int icell, idust, idx;
     double rho, rhoinv, pre, cs, vel, wspeed;
     if(useHydro == 0){ // if no hydro no cfl
         cfl[0] = 1e99;
         return 1;
     }
     *cfl=0; // initially inverted 
-    for(icell = 0; icell < NCELLS; icell++){
+    for(icell = NGHOST; icell < NCELLS - NGHOST; icell++){
         rho = ustate[icell*nvar];
         rhoinv = 1/rho;
 
         vel = ustate[icell*nvar+1]*rhoinv;
-        pre = (ustate[icell*nvar+2]*rhoinv-0.5*vel*vel)*(adi-1);
-        
-        cs = sqrt(adi*pre);
+        if(isothermal == 1){
+            cs = cs_init;
+        } else {
+            pre = (ustate[icell*nvar+2]*rhoinv-0.5*vel*vel)*(adi-1);
+            cs = sqrt(adi*pre);
+        }
         wspeed = cs + fabs(vel);
         *cfl = fmax(wspeed/dr[icell], *cfl);
+#if defined useDustDynamics || defined growthUpdateVelocities
+        for(idust = 0; idust < NdustBins; idust ++){
+            idx =  icell*nvar + IDUST_START + idust*NdustVar;
+            if(ustate[idx] > 0){
+                vel = fabs(ustate[idx + 2] / ustate[idx]);
+                if(vel != vel){
+                    printf("ERROR: NAN VELOCITY \n");
+                    exit(0);
+                }
+                if(vel/dr[icell] > *cfl){
+                    printf("%.4e %.4e %.4e\n", vel, ustate[idx], ustate[idx+2]);
+                }
+                *cfl = fmax(vel/dr[icell], *cfl);
+            } 
+        }
+#endif 
     }
     *cfl = courant_number/cfl[0];
     return 1;
 }
 
 int setBoundary(){
-    int ivar;
-    // Left boundary
+    int ivar, ighost;
+    
+    // Loop over variables
     for( ivar = 0; ivar < nvar; ivar++){
-        if(left_bound == 0){ // reflective
-            if(ivar == 1){
-                ustate[ivar] = -ustate[3*nvar+ivar];
-                ustate[nvar+ivar] = -ustate[2*nvar+ivar];
-            }else{
-                ustate[ivar] = ustate[3*nvar+ivar];
-                ustate[nvar+ivar] = ustate[2*nvar+ivar];
+        // Loop over ghost cells
+        for( ighost = 0; ighost < NGHOST; ighost++){
+            // Left boundary
+            if(left_bound == 0){ // reflective
+                if(ivar == 1){
+                    ustate[nvar*ighost+ivar] = -ustate[(2*NGHOST - 1 - ighost) *nvar+ivar];
+                }else{
+                    ustate[nvar*ighost+ivar] =  ustate[(2*NGHOST - 1 - ighost) *nvar+ivar];
+                }
+            } else if(left_bound == 1){ // outflow
+                if(ivar == 1){
+                    ustate[nvar*ighost+ivar] = fmin(ustate[NGHOST*nvar+ivar],0);
+                }else{
+                    ustate[nvar*ighost+ivar] = ustate[NGHOST*nvar+ivar];
+                }
+            } else if(left_bound == 2){ // fixed
+                if(ivar == 0){
+                    ustate[nvar*ighost + ivar] = bdensL;
+                } else if(ivar == 1){
+                    ustate[nvar*ighost + ivar] = bvelL;
+                } else if(ivar == 2){
+                    ustate[nvar*ighost + ivar] = benerL;
+                } else { // all others variables set as in outflow
+                    ustate[nvar*ighost + ivar] = ustate[NGHOST*nvar+ivar];
+                }
+            } else if(left_bound == 3){ // Periodic
+                ustate[nvar*ighost + ivar] = ustate[(NCELLS - 2*NGHOST + ighost)*nvar  + ivar];
             }
-        } else if(left_bound == 1){ // outflow
-            if(ivar == 1){
-                ustate[ivar] = fmin(ustate[2*nvar+ivar],0);
-                ustate[nvar+ivar] = fmin(ustate[2*nvar+ivar],0);
-            }else{
-                ustate[ivar] = ustate[2*nvar+ivar];
-                ustate[nvar+ivar] = ustate[2*nvar+ivar];
+            // Right boundary
+            if(right_bound == 0){ // reflective
+                if(ivar == 1){
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = -ustate[(NCELLS - 2*NGHOST + ighost)*nvar +ivar];
+                } else {
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = ustate[(NCELLS - 2*NGHOST + ighost)*nvar +ivar];
+                }
+            } else if(right_bound == 1) { // outflow
+                if(ivar == 1){
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = fmax(ustate[(NCELLS - NGHOST - 1)*nvar +ivar],0);
+                } else {
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = ustate[(NCELLS - NGHOST - 1)*nvar +ivar];
+                }
+            } else if(right_bound == 2) { //fixed
+                if(ivar == 0){
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = bdensR;
+                    ustate[(NCELLS-2)*nvar+ivar] = bdensR;
+                } else if(ivar == 1){
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = bvelR;
+                    ustate[(NCELLS-2)*nvar+ivar] = bvelR;
+                } else if(ivar == 2){
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = benerR;
+                } else { // all others variables set as in outflow
+                    ustate[(NCELLS - 1 - ighost)*nvar + ivar] = ustate[(NCELLS - NGHOST - 1)*nvar +ivar];
+                }
+            } else if(right_bound == 3){ // Periodic
+                ustate[(NCELLS - 1 - ighost)*nvar + ivar] = ustate[(2*NGHOST - 1 - ighost)*nvar + ivar];
             }
-        } else if(left_bound == 2){ // fixed
-            if(ivar == 0){
-                ustate[ivar] = bdensL;
-                ustate[nvar + ivar] = bdensL;
-            } else if(ivar == 1){
-                ustate[ivar] = bvelL;
-                ustate[nvar + ivar] = bvelL;
-            } else if(ivar == 2){
-                ustate[ivar] = benerL;
-                ustate[nvar + ivar] = benerL;
-            } else { // all others variables set as in outflow
-                ustate[ivar] = ustate[2*nvar+ivar];
-                ustate[nvar + ivar] = ustate[2*nvar+ivar];
-            }
-        }
-    }
-
-    // Right boundary
-    for (ivar = 0; ivar < nvar;ivar++){
-        if(right_bound == 0){ // reflective
-            if(ivar == 1){
-                ustate[(NCELLS-1)*nvar + ivar] = -ustate[(NCELLS-4)*nvar +ivar];
-                ustate[(NCELLS-2)*nvar + ivar] = -ustate[(NCELLS-3)*nvar +ivar];
-            } else {
-                ustate[(NCELLS-1)*nvar + ivar] = ustate[(NCELLS-4)*nvar +ivar];
-                ustate[(NCELLS-2)*nvar + ivar] = ustate[(NCELLS-3)*nvar +ivar];
-            }
-        } else if(right_bound == 1) { // outflow
-            if(ivar == 1){
-                ustate[(NCELLS-1)*nvar + ivar] = fmax(ustate[(NCELLS-3)*nvar +ivar],0);
-                ustate[(NCELLS-2)*nvar + ivar] = fmax(ustate[(NCELLS-3)*nvar +ivar],0);
-            } else {
-                ustate[(NCELLS-1)*nvar + ivar] = ustate[(NCELLS-3)*nvar +ivar];
-                ustate[(NCELLS-2)*nvar + ivar] = ustate[(NCELLS-3)*nvar +ivar];
-            }
-        } else if(right_bound == 2) { //fixed
-            if(ivar == 0){
-                ustate[(NCELLS-1)*nvar+ivar] = bdensR;
-                ustate[(NCELLS-2)*nvar+ivar] = bdensR;
-            } else if(ivar == 1){
-                ustate[(NCELLS-1)*nvar+ivar] = bvelR;
-                ustate[(NCELLS-2)*nvar+ivar] = bvelR;
-            } else if(ivar == 2){
-                ustate[(NCELLS-1)*nvar+ivar] = benerR;
-                ustate[(NCELLS-2)*nvar+ivar] = benerR;
-            } else { // all others variables set as in outflow
-                ustate[(NCELLS-1)*nvar + ivar] = ustate[(NCELLS-3)*nvar +ivar];
-                ustate[(NCELLS-2)*nvar + ivar] = ustate[(NCELLS-3)*nvar +ivar];
-            }
-        }
+        } 
     }
     return 1;
 }
 int toPrimitive(){
     int icell, idx, ivar;
+#ifdef useDust
+    int idust;
+#endif
     double rho, rhoinv, velx, ekin,eint;
     for(icell = 0; icell < NCELLS; icell++){
         //Index of cell in array
@@ -116,11 +134,15 @@ int toPrimitive(){
         // Momentum -> velocity
         velx = ustate[idx + 1]*rhoinv;
         pstate[idx + 1] = velx;
-        // Total energy -> internal energy -> Pressure
-        // specific ekin
-        ekin = 0.5*velx*velx;
-        eint = ustate[idx + 2]*rhoinv - ekin;
-        pstate[idx + 2]= rho * eint * (adi-1);
+        if(isothermal){
+            pstate[idx + 2] = cs_init*cs_init * rho;
+        } else {
+            // Total energy -> internal energy -> Pressure
+            // specific ekin
+            ekin = 0.5*velx*velx;
+            eint = ustate[idx + 2]*rhoinv - ekin;
+            pstate[idx + 2]= rho * eint * (adi-1);
+        }
 #ifdef useChemistry
         // copy over mass fractions
         for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
@@ -128,8 +150,19 @@ int toPrimitive(){
         }
 #endif 
 #ifdef useDust
-        for(ivar = IDUST_START; ivar < nvar; ivar++){
-            pstate[idx + ivar] = ustate[idx + ivar];
+        for(idust = 0; idust < NdustBins; idust++){
+            idx = icell*nvar + IDUST_START + idust*NdustVar;
+            // denisty -> density
+            pstate[idx] = ustate[idx];
+            // slope   -> slope 
+            pstate[idx + 1] = ustate[idx + 1];
+#ifdef useDustDynamics
+            // momentum -> velocity
+            pstate[idx + 2] = ustate[idx + 2]/ustate[idx];
+#elif defined(growthUpdateVelocitites)
+            // momentum -> momentum (as scalar field)
+            pstate[idx + 2] = ustate[idx + 2];
+#endif
         }
 #endif
     }
@@ -181,7 +214,7 @@ int getTVDSlopes(double *dq, double *dr, double dt){
     int icell, idx, idxm, idxp, ivar;
     double dlft, drgt, slope, sigm1, sigm2;
 
-    // only need slopes on the first ghost cells 
+    // Slopes only made for the inner cells  + ghost cells
     for(icell = 1; icell < NCELLS-1; icell++){
         idx = nvar*icell;
         idxp = nvar*(icell+1);
@@ -254,12 +287,7 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             qP[idx]     = qP[idx]     - rho*vel*twooR * 0.5*dt;
             qP[idx + 2] = qP[idx + 2] - pre*vel*twooR * 0.5*dt;
         }
-        if(qP[idx] <= 0){
-            printf("\n idx = %d \n", icell);
-        }
-        if(qM[idx] <= 0){
-            printf("\n idx = %d \n", icell);
-        }
+        
         // other variables left and right
 #ifdef useChemistry
         for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
@@ -279,6 +307,7 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
             }
         }
 #ifdef useDust
+#ifndef useDustDynamics
         for(ivar = IDUST_START; ivar < nvar; ivar++){
             // cell centered value
             qi = pstate[idx + ivar];
@@ -295,8 +324,14 @@ int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr,
                 qP[idx + ivar] = qP[idx + ivar] - qi*vel*twooR * 0.5 * dt;
             }
         }
-#endif
-#endif
+#else 
+        int ierr = getRiemannStates_dust(dq, qP, qM, dt, dtdx, icell);
+        if(ierr < 0){
+            return ierr;
+        }     
+#endif //useDynamicDust
+#endif //useDust
+#endif //useChemistry 
     }
     return 1;  
 }
@@ -312,7 +347,6 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
     double cfastL, rcL;
     double cfastR, rcR;
     int ivar;
-
     entho = 1/(adi-1);
     
     // Get left and right state variables
@@ -402,6 +436,7 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
     }
 #endif
 #ifdef useDust
+#ifndef useDustDynamics
     for(ivar = IDUST_START; ivar < nvar; ivar++){
         if(SL > 0){
             var0  = qL[ivar];
@@ -415,6 +450,7 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
 
         flux[ivar] = var0*vel0;
     }
+#endif
 #endif
     // transport of internal energy. Needed for eintswitch when Ekin ~ Etot
     // based on li 2008 "A Simple Dual Implementation to Track Pressure Accurately"
@@ -436,19 +472,19 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
     return 1;
 }
 
-int getFluxes(double *qM, double *qP, double *fluxes){
+int getFluxes(double *qM, double *qP, double *fluxes, double dt){
     int iinter, idx, ivar, ierr;
     double qL[nvar], qR[nvar], flux[nFluxVar];
 
     // Loop over interfaces
     for(iinter=0; iinter < NINTER; iinter++){
         // left states
-        idx = (iinter+1)*nvar;
+        idx = (iinter + NGHOST - 1)*nvar;
         for(ivar = 0; ivar < nvar; ivar++){
             qL[ivar] = qP[idx+ivar];
         }
         // right states 
-        idx = (iinter+2)*nvar;
+        idx = (iinter + NGHOST)*nvar;
         for(ivar = 0; ivar < nvar; ivar++){
             qR[ivar] = qM[idx+ivar];
         }
@@ -465,6 +501,10 @@ int getFluxes(double *qM, double *qP, double *fluxes){
             fluxes[idx+ivar] = flux[ivar];
         }
     }
+    printf("%.4e, %.4e \n", fluxes[(NINTER -2)*nFluxVar], fluxes[(NINTER -1)*nFluxVar]); 
+#ifdef useDustDynamics
+    ierr = getFluxes_dust(qM, qP, fluxes, dt);
+#endif
     return 1;
 }
 
@@ -503,17 +543,17 @@ int doHydroStep(double dt){
             return -1;
         }
         // calculate Fluxes 
-        ierr = getFluxes(qM, qP, fluxes);
+        ierr = getFluxes(qM, qP, fluxes, dt);
         if(ierr < 0){
             printf("Error in getFluxes\n");
             return -1;
         }
 
         // Update the conservative variables
-        for(icell = 2; icell < NCELLS-2; icell++){
+        for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
             idx  = icell*nvar;
-            ifp = (icell-1)*nFluxVar;
-            ifn = (icell-2)*nFluxVar;
+            ifp = (icell - NGHOST + 1)*nFluxVar;
+            ifn = (icell - NGHOST)*nFluxVar;
 
             if(geometry == 1){
                 rm = rs[icell] - dr[icell]*0.5;
@@ -540,14 +580,21 @@ int doHydroStep(double dt){
             }
             
             for(ivar = 0; ivar<nvar; ivar++){
+                if(isothermal && ivar == 2){
+                    continue;
+                }
                 unew = ustate[idx+ivar]+(fluxes[ifn+ivar]*surfm-fluxes[ifp+ivar]*surfp)*dt/vol;
-                
+#ifdef useDust
+                if((ivar==0 || ivar==2 || (ivar >= IDUST_START && (ivar - IDUST_START)%NdustVar == 0)) && unew<0 ){
+#else
                 if((ivar==0 || ivar==2) && unew<0 ){
+#endif
                     printf("\nNEGATIVE IVAR = %d\n",ivar);
+                    printf("unew=%.4e\n", unew);
                     printf("u-1 = %.4e, u=%.4e , u+1=%.4e \n",ustate[(icell-1)*nvar+ivar], ustate[(icell)*nvar+ivar], ustate[(icell+1)*nvar+ivar]);
                     printf("u-1 = %.4e, u=%.4e , u+1=%.4e \n",ustate[(icell-1)*nvar+ivar], ustate[idx+ivar], ustate[(icell+1)*nvar+ivar]);
                     printf("FL = %.4e FR= %.4e \n",surfm*fluxes[ifn+ivar]*dt/vol,surfp*fluxes[ifp+ivar]*dt/vol);
-                    printf("icell = %d \n",icell); 
+                    printf("icell = %d / %d\n",icell, NCELLS - NGHOST - 1); 
                     return -1;
                 }
                 uold[ivar] = ustate[idx+ivar];
@@ -562,7 +609,8 @@ int doHydroStep(double dt){
                 //smom = 2*qstate[idx + 2]/rs[icell];
                 ustate[idx + 1] = ustate[idx + 1] + smom*dt;
             }
-            if(hy_ethresh>=0.0){
+             
+            if(hy_ethresh>=0.0 && isothermal == 0){
                 if(Ethermal < ustate[idx + 2]*hy_ethresh){
                     Ekinetic = 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
                     //printf("%.4e %.4e \n", Ethermal, Ekinetic);
@@ -570,23 +618,25 @@ int doHydroStep(double dt){
                 }
             }
             
-            if(ustate[idx + 2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
-                idxm = (icell-1)*nvar;
-                idxp = (icell+1)*nvar;
-                printf("NEGATIVE INTERNAL ENERGY\n");
-                printf("cell = %d \n", icell);
-                printf("dens = %.4e %.4e %.4e \n", ustate[idxm], uold[0], ustate[idxp]); 
-                printf("velx = %.4e %.4e %.4e \n", ustate[idxm+1]/ustate[idxm], uold[1]/uold[0], ustate[idxp+1]/ustate[idxp]); 
-                printf("etot = %.4e %.4e %.4e \n", ustate[idxm+2], uold[2], ustate[idxp+2]); 
-                printf("enew = %.4e %.4e %.4e \n", ustate[idxm+2], ustate[idx + 2], ustate[idxp+2]); 
-                printf("ekin = %.4e\n",  0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
-                printf("eint = %.4e\n", ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
-                printf("rhoFluxes = %.4e \t %.4e\n", fluxes[ifn + 0]*surfm, fluxes[ifp+0]*surfp);
-                printf("momFluxes = %.4e \t %.4e\n", fluxes[ifn + 1]*surfm, fluxes[ifp+1]*surfp);
-                printf("eneFluxes = %.4e \t %.4e\n", fluxes[ifn + 2]*surfm, fluxes[ifp+2]*surfp);
+            if(isothermal == 0) { 
+                if(ustate[idx + 2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
+                    idxm = (icell-1)*nvar;
+                    idxp = (icell+1)*nvar;
+                    printf("NEGATIVE INTERNAL ENERGY\n");
+                    printf("cell = %d \n", icell);
+                    printf("dens = %.4e %.4e %.4e \n", ustate[idxm], uold[0], ustate[idxp]); 
+                    printf("velx = %.4e %.4e %.4e \n", ustate[idxm+1]/ustate[idxm], uold[1]/uold[0], ustate[idxp+1]/ustate[idxp]); 
+                    printf("etot = %.4e %.4e %.4e \n", ustate[idxm+2], uold[2], ustate[idxp+2]); 
+                    printf("enew = %.4e %.4e %.4e \n", ustate[idxm+2], ustate[idx + 2], ustate[idxp+2]); 
+                    printf("ekin = %.4e\n",  0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
+                    printf("eint = %.4e\n", ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
+                    printf("rhoFluxes = %.4e \t %.4e\n", fluxes[ifn + 0]*surfm, fluxes[ifp+0]*surfp);
+                    printf("momFluxes = %.4e \t %.4e\n", fluxes[ifn + 1]*surfm, fluxes[ifp+1]*surfp);
+                    printf("eneFluxes = %.4e \t %.4e\n", fluxes[ifn + 2]*surfm, fluxes[ifp+2]*surfp);
 
-                if(ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
-                    return -1;
+                    if(ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
+                        return -1;
+                    }
                 }
             }
         }

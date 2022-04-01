@@ -40,7 +40,7 @@ int makeOutput(double t, char *outputName){
     if(ierr < 0) {
         return -1;
     }
-    for(icell = 2; icell < NCELLS-2; icell++){
+    for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
         fprintf(fptr, "%.8e\t", rs[icell]);
         idx = icell*nvar;
         for(ivar = 0; ivar < nvar; ivar++){

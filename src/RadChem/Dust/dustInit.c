@@ -9,9 +9,9 @@
 #include <dustRadiation.h>
 #include <constantsAndUnits.h>
 #ifdef useDust
-int nrealDustPars = 13;
+int nrealDustPars = 18;
 real_list_t *dustDPars = NULL;
-int nintDustPars = 9;
+int nintDustPars = 10;
 int_list_t *dustIPars = NULL;
 //int nstrPars = 10;
 //str_list_t chemSPars[];
@@ -48,6 +48,22 @@ double dadt_c;
 double dadt_tscale;
 double dadt_min;
 
+// Options for dust-gas drag
+int drag_mode; // 0 standard based on physical state
+               // 1 constant
+               // 2 Powerlaw in deltaV
+               // 3 third order expansion
+               // 4 mixed
+double drag_const; // proporionality
+double drag_par; // in case
+                 // 0 does nothing
+                 // 1 does nothing
+                 // 2 power of the powerlaw
+                 // 3 constant before the square deltaV
+                 // 4 constant before the square deltaV
+
+double drag_dtmax_fact; // temporal resolution in 1/stopping_time 
+
 // whether the lower/upper bounds of the distribution are to be pile up (eg. gathered) or outflow when rebinned
 int dust_lowerBound_pileUp;
 int dust_upperBound_pileUp;
@@ -59,8 +75,9 @@ double *dadt         = NULL;
 double *dadt_fixed   = NULL;
 double *number = NULL;
 double *slope  = NULL;
+double *velocity = NULL;
+double *dragCoef = NULL;
 
-double *dust_vrel = NULL;
 
 double *Mnew = NULL;
 double *Nnew = NULL;
@@ -116,6 +133,12 @@ int setDustPars(){
     strcpy(dustDPars[11].name, "dust_dadt_tscale");  dustDPars[11].value = 0.0;
     
     strcpy(dustDPars[12].name, "dust_dadt_min");  dustDPars[12].value = 3.17e-17;
+    strcpy(dustDPars[13].name, "dust_velo_init");  dustDPars[13].value = 0.0;
+    
+    strcpy(dustDPars[14].name, "dust_drag_const");  dustDPars[14].value = 0.1;
+    strcpy(dustDPars[15].name, "dust_drag_par");  dustDPars[15].value = 0.1;
+    strcpy(dustDPars[16].name, "dust_drag_dtmax_fact");  dustDPars[16].value = 0.1;
+    strcpy(dustDPars[17].name, "dust_velo_initL");  dustDPars[17].value = 0.0;
     
     
     // Integer parameters
@@ -128,6 +151,7 @@ int setDustPars(){
     strcpy(dustIPars[6].name, "dust_maxSubSteps"); dustIPars[6].value = 1000;
     strcpy(dustIPars[7].name, "dust_lowerBound_pileUp"); dustIPars[7].value = 0;
     strcpy(dustIPars[8].name, "dust_upperBound_pileUp"); dustIPars[8].value = 1;
+    strcpy(dustIPars[9].name, "dust_drag_mode"); dustIPars[9].value = 0;
     return 1;
 }
 
@@ -380,13 +404,15 @@ int initDust(){
     dadt_fixed   = (double *) malloc(dust_nbins*sizeof(double));  
     number       = (double *) malloc(dust_nbins*sizeof(double)); 
     slope        = (double *) malloc(dust_nbins*sizeof(double)); 
+    velocity     = (double *) malloc(dust_nbins*sizeof(double)); 
     Mnew         = (double *) malloc(dust_nbins*sizeof(double)); 
     Nnew         = (double *) malloc(dust_nbins*sizeof(double)); 
     Snew         = (double *) malloc(dust_nbins*sizeof(double)); 
     vnew         = (double *) malloc(dust_nbins*sizeof(double)); 
-    
-    dust_vrel = (double *) malloc(dust_nbins*sizeof(double)); 
-        
+   
+#if defined useDustDynamics || defined growthUpdateVelocities
+    dragCoef = (double *) malloc(dust_nbins*sizeof(double));
+#endif        
     // determine where the cutoff point is for silicates
     if(fSi < 1.0){
         isilicone = Nabins;
@@ -458,7 +484,7 @@ int initDust(){
 
         if(dust_useSublimation){
             getrealdustpar("dust_dadt_min", &dadt_min);
-            getintegerdustpar("dust_NtempBins", &NtempBins);
+            getintegerdustpar("dust_NtempBiyyns", &NtempBins);
             initTemperatureDist(NtempBins);
         }
     }
@@ -482,6 +508,14 @@ int initDust(){
         }
     }
 
+#if defined useDustDynamics || defined growthUpdateVelocities
+    // load parameters related to gas-dust 
+    getrealdustpar("dust_drag_dtmax_fact", &drag_dtmax_fact);
+    getrealdustpar("dust_drag_const", &drag_const);
+    getrealdustpar("dust_drag_par", &drag_par);
+    getintegerdustpar("dust_drag_mode", &drag_mode);
+#endif
+
     return 1;
 }
 
@@ -492,6 +526,7 @@ int setCellInit(int icell, double dustMass){
     double mass;
     double Mtot_s, Mtot_c;
     double norm_s, norm_c, norm, Sj;
+    double velo_init;
 
     Mtot_c = 0;
     Mtot_s = 0;
@@ -527,6 +562,7 @@ int setCellInit(int icell, double dustMass){
     norm_s = fSi*dustMass/Mtot_s;
     norm_c = (1-fSi)*dustMass/Mtot_c;
 
+    getrealdustpar("dust_velo_init", &velo_init);
     for(idx = 0; idx < NdustBins; idx++){
         ibin = globalToLocalIndex(idx);
         if(ibin < isilicone){
@@ -548,8 +584,8 @@ int setCellInit(int icell, double dustMass){
         }
         ustate[icell*nvar + IDUST_START + idx*NdustVar] = mass;
         ustate[icell*nvar + IDUST_START + idx*NdustVar+1] = Sj;
-#ifdef trackDustVelocities
-        ustate[icell*nvar + IDUST_START + idx*NdustVar+2] = 0;
+#if defined useDustDynamics || defined growthUpdateVelocities
+        ustate[icell*nvar + IDUST_START + idx*NdustVar+2] = velo_init*mass;
 #endif
     }
 

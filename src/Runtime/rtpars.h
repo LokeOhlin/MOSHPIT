@@ -11,7 +11,7 @@ int RuntimePars_output();
 extern double t0;
 extern double tend;
 extern double dt_init, dt_max;
-extern double time, dt;
+extern double time, dt, timeOut;
 extern int imax;
 extern int nintRTPars, nrealRTPars;
 extern int_list_t *RTIPars;

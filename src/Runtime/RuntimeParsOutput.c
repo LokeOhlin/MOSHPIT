@@ -26,8 +26,16 @@ int RuntimePars_initIO(){
         }
     }
 
+    
+    return 1;
+}
+
+int RuntimePars_output(){
+    int ierr;
+    double time_out;
     // write specific headers
-    ierr = my_writeAttribute("/Headers", "time", &time, H5T_NATIVE_DOUBLE); 
+    // This time has not yet been advanced. Add dt to make in sync
+    ierr = my_writeAttribute("/Headers", "time", &timeOut, H5T_NATIVE_DOUBLE); 
     if(ierr < 0){
         return -1;
     }
@@ -36,11 +44,5 @@ int RuntimePars_initIO(){
     if(ierr < 0){
         return -1;
     }
-    
-    return 1;
-}
-
-//Nothing done here
-int RuntimePars_output(){
     return 1;
 }

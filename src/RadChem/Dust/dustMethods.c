@@ -45,123 +45,6 @@ int localToGlobalIndex(int ibin){
     return idx;
 }
 
-//////////////////////////////////////////
-//
-//  Methods to estimate the velocity of the dust grains
-//
-//////////////////////////////////////////
-
-// get average dust velocity over the timestep relative to gas
-double get_average_vdust(int ibin, int iabin, int graphite, double *rpars, double dt){
-
-    // take the current velocity
-    double vinit = dust_vrel[ibin];
-
-    double numd    = rpars[0];
-    double Tgas    = rpars[1]; 
-    double mean_mw = rpars[2];
-    double rhoGas    = numd * ch_kb * abar;
-    // acceleration of the gas due to radiation pressure
-    double gas_accel = rpars[3];
-
-    // get the energy absorption rate
-    double Eabs_dust = getAbsorption(ibin, graphite);
-    // acceleration of the dust grain due to radiation pressure
-    double mass;
-    if(graphite){
-        mass = Natoms[ibin] * aveMatom_c;
-    } else {
-        mass = Natoms[ibin] * aveMatom_s;
-    }
-    double dust_accel = Eabs_dust/clght/mass;
-
-    // relative acceleration (always positive)
-    double rad_accel = fabs(dust_accel - gas_accel);
-    
-    // the friction force from gas is proportional to the relative velocity
-    // calculate the coefficient
-    double fric_coeff = 4*sqrt(8*boltzmann*Tgas/(M_PI*mean_mw))*rhoGas*pi_asquare[iabin]/3/mass;
-
-    // calculate the average velocity based of the solution to
-    // dv/dt + fric_coeff*v = rad_accell
-    double mean_vdust = rad_accel/fric_coeff + (rad_accel/pow(fric_coeff,2) - vinit/fric_coeff)*expm1(-fric_coeff*dt)/dt;
-    return mean_vdust;
-}   
-
-int update_vdust(int ibin, int iabin, int graphite, double *rpars, double dt){
-    // take the current velocity
-    double vinit = dust_vrel[ibin];
-
-    double numd    = rpars[0];
-    double Tgas    = rpars[1]; 
-    double mean_mw = rpars[2];
-    double rhoGas    = numd * ch_kb * abar;
-    // acceleration of the gas due to radiation pressure
-    double gas_accel = rpars[3];
-
-    // get the energy absorption rate
-    double Eabs_dust = getAbsorption(ibin, graphite);
-    // acceleration of the dust grain due to radiation pressure
-    double mass;
-    if(graphite){
-        mass = aveMatom_c * Natoms[ibin];
-    } else {
-        mass = aveMatom_s * Natoms[ibin];
-    }
-    double dust_accel = Eabs_dust/clght/mass;
-
-    // relative acceleration (always positive)
-    double rad_accel = fabs(dust_accel - gas_accel);
- 
-    // the friction force from gas is proportional to the relative velocity
-    // calculate the coefficient
-    double fric_coeff = 4*sqrt(8*boltzmann*Tgas/(M_PI*mean_mw))*rhoGas*pi_asquare[iabin]/3/mass;
-
-    // solution to :
-    // dv/dt + fric_coeff*v = rad_accell
-    dust_vrel[ibin] = -rad_accel*expm1(-fric_coeff*dt)/fric_coeff + vinit*exp(-fric_coeff*dt);
-    return 1;
-
-}
-
-
-// loops over all local dustbins and sets them to their initial value for the global timestep
-int set_vdusts(int icell){
-    int idx, ibin;
-    for(idx = 0; idx < dust_nbins; idx++){
-        ibin = globalToLocalIndex(idx);
-#ifdef trackDustVelocities
-        //if the simulation is keeping track of the dust velocities we take these. Saved as momentum density
-        dust_vrel[ibin] = ustate[icell*nvar + IDUST_START + NdustVar*idx + 2]/ustate[icell*nvar + IDUST_START + NdustVar*idx];
-#else
-        // otherwise set this to zero
-        dust_vrel[ibin] = 0.0;
-#endif
-
-    }
-    // for safety, reset the velocities of the ghost bins
-    dust_vrel[0] = 0.0;
-    if(fSi < 1.0){
-        dust_vrel[isilicone - 1] = 0.0;
-    }
-    if(fSi > 0.0){
-        dust_vrel[isilicone] = 0.0;
-    } 
-    dust_vrel[dust_nbins - 1] = 0.0;
-    return 1;
-}
-
-#ifdef trackDustVelocities
-int get_vdust(int icell){
-    int idx, ibin;
-    for(idx = 0; idx < dust_nbins; idx++){
-        ibin = globalToLocalIndex(idx);
-        //if the simulation is keeping track of the dust velocities we take these
-        ustate[icell*nvar + IDUST_START + NdustVar*idx + 2] = dust_vrel[ibin] * ustate[icell*nvar + IDUST_START + NdustVar*idx];
-    }
-    return 1;
-}
-#endif
 
 //////////////////////////////////////////
 //
@@ -421,16 +304,25 @@ int dustCell(double *rpars, int *ipars, double dt_step){
     double dt, time_dust, dadt_max_cell;
     double Nsum, Msum, Sest, NumTot_cell_g, NumTot_cell_s;
     double Mtot_old, Ntot_old, Mtot_new, Ntot_new, Ntot_mid;
+    
+    // unpack gas variables
+    double rho = rpars[0];
+    double numd = rpars[1];
+    double temp = rpars[2];
+    double mmol = rpars[3];
+    double vgas = rpars[4];
+    double gas_accel = rpars[5];
+    double cs = rpars[6];
+
     // Start by calculating change in size due to sublimation/sputtering/accretion
     //initialize by trying to take one full step
     time_dust = 0;
     // try to take all in one step
     dt = dt_step;
-    
+   
     // set the growth only dependent on current gas and radiation conditions.
     // eg does not change within loop
-    ierr = set_dadt_fixed(rpars);
-   
+    ierr = set_dadt_fixed(rpars); 
 
     // calculate total number of grains at start for normalisation
     NumTot_cell_g = 0;
@@ -471,7 +363,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                             number[ibin] = 0.0;
                             slope[ibin]  = 0.0;
                             // if all grains are gone, any new ones shouldnt have their velocity
-                            dust_vrel[ibin] = 0.0;
+                            velocity[ibin] = 0.0;
                         } else {
                             dt = dt_step/dust_maxSubSteps; 
                         }
@@ -484,9 +376,21 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             Ntot_old += number[ibin];
             Mtot_old += getMass(number[ibin], slope[ibin],iabin); 
         }
+      
+#ifdef growthUpdateVelocities
+        // If velocites are relevant to the growth channels, we should update them as we go
+        // Do a half step in drag and velocity  
+        ierr = dustCalcGasDrag(rpars[0], vgas, cs, dt); 
+        ierr = dustCalcRadPress(dt);
+        // Update on internal gas velocity
+        vgas = vgas + gas_accel*dt*0.5;
+        rpars[3] = vgas;
         
+#endif
         // update the growth rate for the new stepsize
-        ierr = set_dadt(rpars, dt);
+        ierr = set_dadt(rpars, dt*0.5);
+        
+
         
         if(dt  < 0){
             return -1;
@@ -538,7 +442,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                     Nsum = Nsum + intN; 
                     Msum = Msum + intM;
                     // add momentum
-                    vnew[ibin] = vnew[ibin] + intM*dust_vrel[ibin2];
+                    vnew[ibin] = vnew[ibin] + intM*velocity[ibin2];
                 }
             }
 
@@ -573,7 +477,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             }
             number[ibin] = Nnew[ibin];
             slope[ibin]  = Snew[ibin];
-            dust_vrel[ibin] = vnew[ibin];
+            velocity[ibin] = vnew[ibin];
             if(ibin < isilicone){
                 NumTot_cell_g += number[ibin];
             } else {
@@ -581,20 +485,14 @@ int dustCell(double *rpars, int *ipars, double dt_step){
             }
         }
 
-#ifdef sputteringUseVelocities
-        // update the velocities for the next timestep
-        for(idx = 0; idx < NdustBins; idx++){
-            ibin = globalToLocalIndex(idx);
-            if(ibin < isilicone){
-                graphite = 1;
-            } else {
-                graphite = 0;
-            }
-            iabin = ibin - isilicone * (1-graphite);
-            ierr = update_vdust(ibin, iabin, graphite, rpars, dt);
-        }
+#ifdef growthUpdateVelocities
+        // Do the second half step in drag and velocity  
+        // reverse the ordering of drag and source terms 
+        ierr = dustCalcRadPress(dt);
+        ierr = dustCalcGasDrag(rpars[0], vgas, cs, dt); 
+        vgas = vgas + gas_accel*dt*0.5;
+        rpars[3] = vgas;
 #endif
-
         // update time
         time_dust = time_dust + dt;
         // set timestep to attempt to do rest in one go
@@ -646,8 +544,10 @@ int setBinsCell(int icell, double *Mtot){
         *Mtot = *Mtot + mass;
         
         number[ibin] = getNumber(slope[ibin], mass/norm, iabin);
+#if defined useDustDynamics || defined growthUpdateVelocities
+        velocity[ibin] = ustate[icell * nvar + IDUST_START + NdustVar*idx + 2]/mass;
+#endif
     }
-    ierr = set_vdusts(icell);
     return 1;
 }
 
@@ -680,11 +580,12 @@ int getBinsCell(int icell, double *Mtot){
         *Mtot = *Mtot + mass*norm;
         ustate[icell*nvar + IDUST_START + NdustVar*idx    ] = mass * norm;
         ustate[icell*nvar + IDUST_START + NdustVar*idx + 1] = slope[ibin];
-    }
-#ifdef trackDustVelocites
-    ierr = get_vdusts(icell);
+#if defined useDustDynamics || defined growthUpdateVelocities
+        ustate[icell*nvar + IDUST_START + NdustVar*idx + 2] = velocity[ibin]*mass*norm;
 #endif
+    }
     return 1;
 }
 
-#endif
+#endif:w
+
