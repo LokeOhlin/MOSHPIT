@@ -382,9 +382,10 @@ void cellAbsorption(double *radData, double *specData, double numd, double Temp,
         // Dust
         DNdust = NabsTot * DtauD * norm;
         DustEabs += DNdust * ephots/dt;
-        DustMom  += DNdust * DtauD * radData[iEbin + numRadiationBins]/clght;
+        DustMom  += DNdust * ephots/clght;
 
         // Remove photons
+        //printf("%d %.4e %.4e %.4e %.4e\n", iEbin, nphots, nphots-NabsTot, DtauH, numd*xH);
         nphots = nphots - NabsTot;
         if(nphots < 0 ) {
             nphots = 0;
@@ -422,7 +423,7 @@ int setPhotonFluxes(int icell, double *radData, double geoFact){
     int iEbin;
 
     for(iEbin = 0; iEbin < numRadiationBins; iEbin++){
-        photonFluxes[icell + iEbin] = radData[iEbin]*geoFact;
+        photonFluxes[icell*numRadiationBins + iEbin] = radData[iEbin]*geoFact;
     }
     return 1;
 }
