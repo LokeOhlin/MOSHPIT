@@ -1,0 +1,41 @@
+useHydro = 0
+
+nstepOut = 50
+
+imax = 10009900000
+tend = 3e11
+dt_init = 1e0
+dt_max  = 1e9
+
+t0 = 0
+rR = 1.943909355486718e+19
+ncells = 512
+numd_init = 100
+adi = 1.0001
+isothermal = 1
+
+xH_init = 1.0
+xH2_init = 0
+xCO_init = 1e-10
+
+
+ch_abundHe = 1e-10 
+ch_abundC  = 1e-10 
+ch_abundO  = 1e-10 
+ch_abundSi = 1e-10 
+ch_abundD  = 1e-10 
+ch_abundM  = 1e-10 
+ch_abundN  = 1e-10 
+ch_dust_to_gas_ratio = 1e-9
+ch_AV_conversion_factor = 0.0
+ch_max_ion_frac_change = 0.1
+
+Lstar = 352316
+Tstar = 45258.5
+
+setup = 0
+radiationPressure = 0
+numBinsSubIon = 1
+numBinsFullIon = 1
+
+readSEDFromFile = 1
