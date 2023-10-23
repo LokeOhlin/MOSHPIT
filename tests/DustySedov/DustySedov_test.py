@@ -1,16 +1,19 @@
-from moshpit_utils.test_utils.SedovTaylor import get_solution, get_position
+from moshpit_utils.test_utils.SedovTaylor import get_solution, get_shockparams
 import moshpit_utils.units.cgs as cgs
 import moshpit_utils.dust_utils as dust_utils
 from moshpit_utils import set_parameter, current_time
+from moshpit_utils.python_utils import fmt_10, color_scheme, label_scheme, get_figure_parameters
 
 import h5py as hp
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import os
 import sys
 import subprocess
 import argparse
 import glob 
+
 
 
 
@@ -59,7 +62,7 @@ def run_simulation(kamp, args, simname):
     # run
     subprocess.run([args.moshpit_dir + "/moshpit"])
     # process outputs
-    files = sorted(glob.glob("output_*"))[1:]
+    files = sorted(glob.glob("output_*"))[1:-1]
     print(files)
     
     for ifile, fname in enumerate(files):
@@ -69,34 +72,36 @@ def run_simulation(kamp, args, simname):
         pos, rhogas, vgas, pgas, rhodust, vdust = get_simulated(hfile)
         # semi analytic values
         pos_sa, rho_sa, vel_sa, pre_sa = get_solution(time, 1, 1, args.gamma)  
-        pos_shock = get_position(time, 1, 1)
+        pos_shock, dennorm, vel_shock, prenorm = get_shockparams(time, 1, 1, args.gamma)
 
-        fig, axes = plt.subplots(nrows = 2, ncols = 2, sharex = True)
-        axes[0,0].plot(pos,rhogas,  c = "navy")
-        axes[0,0].plot(pos_sa,rho_sa, c = "orange")
-        axes[0,0].set_ylabel("Density [code units]")
-        axes[0,0].set_ylim(0,None)
+        nrows = 2
+        ncols = 1
 
-        axes[0,1].plot(pos,vgas,  c = "navy")
-        axes[0,1].plot(pos,vdust,  c = "navy", ls = "--", marker = "x")
-        axes[0,1].plot(pos_sa,vel_sa, c = "orange")
-        axes[0,1].set_ylabel("velocity [code units]")
-        
-        axes[1,0].plot(pos,pgas,  c = "navy")
-        axes[1,0].plot(pos_sa,pre_sa, c = "orange")
-        axes[1,0].set_ylabel("Pressure [code units]")
-        
-        axes[1,1].plot(pos, rhodust,  c = "navy", ls = "--",  marker = "x")
-        axes[1,1].set_xlim(0, 0.5)
-        axes[1,1].set_ylim(0, None)
-        axes[1,1].set_ylabel("Dust Density [code units]")
+        figsize, subplots_pars = get_figure_parameters(ncols,nrows, sharex = True)
+        fig, axes = plt.subplots(nrows = nrows, ncols = ncols, figsize = figsize, sharex = True)
+        plt.subplots_adjust(**subplots_pars)
+        axes[0].text(0.05,3.5, r"$t=%.1f$"%time)
+        axes[0].plot(pos,rhogas,  c = color_scheme["gas"])
+        axes[0].plot(pos_sa,rho_sa, ls = "--", c = "k")
+        axes[0].plot(pos, rhodust*100, c = color_scheme["dust"])
+        axes[0].set_ylabel(r"$%s,\,100%s $ [code units]"%(label_scheme["rhogas"], label_scheme["rhodust"]))
+        axes[0].set_ylim(0.0,4.5)
+        axes[0].set_yticks([0.0,1.5,3.0, 4.5])
         
 
-        axes[-1,0].set_xlabel("position [code units]")
-        axes[-1,1].set_xlabel("position [code units]")
-   
-        print(simname+"_"+fname[-4:]+ ".png")
-        plt.savefig(simname+"_"+fname[-4:]+ ".png")
+        axes[1].plot(pos, vgas/vel_shock,  c = color_scheme["gas"], label = "Gas")
+        axes[1].plot(pos, vdust/vel_shock, c = color_scheme["dust"], label = "Dust")
+        axes[1].plot(pos_sa,vel_sa/vel_shock, ls = "--", c = "k", label = "SA")
+        axes[1].set_ylabel(r"$%s/U_{sh},\,%s/U_{sh}$"%(label_scheme["vgas"], label_scheme["vdust"]))
+         
+
+        axes[1].set_xlabel(r"$r$ [code units]")
+        axes[1].set_ylim(0.0, 0.8)
+        axes[1].legend()
+        axes[1].set_yticks([0,0.2,0.4, 0.6])
+        axes[1].set_xlim(0, np.max(pos))
+        print(simname+"_"+fname[-4:]+ ".pdf")
+        plt.savefig(simname+"_"+fname[-4:]+ ".pdf")
         plt.show()
         plt.close(fig)
     os.chdir(cwd)
@@ -111,7 +116,7 @@ ap.add_argument('--moshpit_dir', default = cwd+"/../../")
 ap.add_argument('--gamma', default = 5/3, type = float)
 ap.add_argument('--drag_dt', default = 1e-2, type = float)
 ap.add_argument('--tmax', default = 0.1, type = float)
-ap.add_argument('--dtout', default = 0.01, type = float)
+ap.add_argument('--dtout', default = 0.1, type = float)
 ap.add_argument('--no_recompile', action = "store_true")
 args=ap.parse_args()
 

@@ -9,7 +9,9 @@ tend = 0.1
 dt_init = 1e-6
 dt_max  = 1e-2
 
+logspace_cells = 0
 geometry = 1
+interpolator = 0
 rR = 0.5
 rL = 0.0
 ncells = 128
