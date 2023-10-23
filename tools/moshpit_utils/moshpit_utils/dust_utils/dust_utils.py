@@ -32,11 +32,18 @@ def dustDensity(hfile):
     slope_s = hfile['slope'][:,isilicone:]
 
     abin_c = hfile['agrain'][:]
-    aes = dustBinEdges(hfile)
+    aes = hfile["agrain_binEdges"][:]
 
-    mass_c = dustBinMass(num_c, slope_c, aes[:-1][np.newaxis,:], abin_c[np.newaxis,:], aes[1:][np.newaxis,:])
-    mass_s = dustBinMass(num_s, slope_s, aes[:-1][np.newaxis,:], abin_c[np.newaxis,:], aes[1:][np.newaxis,:])
+    if isilicone > 0:
+        mass_c = dustBinMass(num_c, slope_c, aes[:-1][np.newaxis,:], abin_c[np.newaxis,:], aes[1:][np.newaxis,:])
+    else:
+        mass_c = np.array([[0]])
+    if isilicone < len(abin_c):
+        mass_s = dustBinMass(num_s, slope_s, aes[:-1][np.newaxis,:], abin_c[np.newaxis,:], aes[1:][np.newaxis,:])
+    else:
+        mass_s = np.array([[0]])
 
+    print(np.sum(mass_c))
     mass_c = 4*np.pi/3 * 2.26 * mass_c
     mass_s = 4*np.pi/3 * 3.5  * mass_s
 
