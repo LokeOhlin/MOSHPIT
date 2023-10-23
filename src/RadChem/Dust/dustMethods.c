@@ -8,6 +8,7 @@
 #include <moshpit.h>
 #include <dustRadiation.h>
 #include <constantsAndUnits.h>
+#include <rtpars.h>
 #ifdef useDust
 /////////////////////////////////////////
 //
@@ -68,10 +69,10 @@ double intMj(int ibin, int iabin, double a, double dt){
     double ae  = abin_e[iabin];
 
     // integral (a+da)**3*(a-ac)
-    double slope_fact = pow(a,5)/5. + (3*da-ac)*pow(a,4)/4.;
-    slope_fact += da*(da-ac)*pow(a,3) + da*da*(da-3*ac)*a*a/2. +da*da*da*ac*a;
+    double slope_fact = pow(a,5.)/5. + (3*da-ac)*pow(a,4.)/4.;
+    slope_fact += da*(da-ac)*pow(a,3.) + da*da*(da-3.*ac)*a*a/2. +da*da*da*ac*a;
 
-    return number[ibin]*pow(a+da,4)/(aep-ae)/4. + slope[ibin]*slope_fact;
+    return number[ibin]*pow(a+da,4.)/(aep-ae)/4. + slope[ibin]*slope_fact;
 }
 
 //
@@ -379,12 +380,19 @@ int dustCell(double *rpars, int *ipars, double dt_step){
       
 #ifdef growthUpdateVelocities
         // If velocites are relevant to the growth channels, we should update them as we go
-        // Do a half step in drag and velocity  
-        ierr = dustCalcGasDrag(rpars[0], vgas, cs, dt); 
-        ierr = dustCalcRadPress(dt);
+        // Do a half step in drag and velocity
+        if(verbose) printf("mass  )%.4e %.4e %.4e  %.4e %.4e\n", rpars[0], getMass(number[1], slope[1], 1)*4*M_PI*rho_c,\
+                                                                           getMass(number[2], slope[2], 2)*4*M_PI*rho_c,\
+                                                                           getMass(number[5], slope[5], 1)*4*M_PI*rho_s,\
+                                                                           getMass(number[6], slope[6], 2)*4*M_PI*rho_s);
+        if(verbose) printf("start )%.4e %.4e %.4e  %.4e %.4e\n", vgas, velocity[1], velocity[2], velocity[5], velocity[6]);
+        ierr = doDustGasDrag_cell(rpars[0], &vgas, cs, 0.5*dt); 
+        if(verbose) printf("drag )%.4e %.4e %.4e  %.4e %.4e\n", vgas, velocity[1], velocity[2], velocity[5], velocity[6]);
+        ierr = dustCalcRadPress(0.5*dt);
         // Update on internal gas velocity
         vgas = vgas + gas_accel*dt*0.5;
-        rpars[3] = vgas;
+        if(verbose) printf("pres) %.4e %.4e %.4e %.4e %.4e %.4e\n", vgas, velocity[1], velocity[2], velocity[5], velocity[6], gas_accel);
+        rpars[4] = vgas;
         
 #endif
         // update the growth rate for the new stepsize
@@ -446,7 +454,7 @@ int dustCell(double *rpars, int *ipars, double dt_step){
                 }
             }
 
-            if(Nsum < 0 || Msum < 0){
+            if(Nsum <= 0 || Msum <= 0){
                 Nnew[ibin] = 0;
                 Snew[ibin] = 0;
                 Mnew[ibin] = 0;
@@ -488,10 +496,17 @@ int dustCell(double *rpars, int *ipars, double dt_step){
 #ifdef growthUpdateVelocities
         // Do the second half step in drag and velocity  
         // reverse the ordering of drag and source terms 
-        ierr = dustCalcRadPress(dt);
-        ierr = dustCalcGasDrag(rpars[0], vgas, cs, dt); 
+        if(verbose) printf("mass  )%.4e %.4e %.4e  %.4e %.4e\n", rpars[0], getMass(number[1], slope[1], 1)*4*M_PI*rho_c,\
+                                                                           getMass(number[2], slope[2], 2)*4*M_PI*rho_c,\
+                                                                           getMass(number[5], slope[5], 1)*4*M_PI*rho_s,\
+                                                                           getMass(number[6], slope[6], 2)*4*M_PI*rho_s);
+        if(verbose) printf("mid) %.4e %.4e %.4e %.4e %.4e\n", vgas, velocity[1], velocity[2], velocity[5], velocity[6]);
+        ierr = dustCalcRadPress(0.5*dt);
         vgas = vgas + gas_accel*dt*0.5;
-        rpars[3] = vgas;
+        if(verbose) printf("pres) %.4e %.4e %.4e %.4e %.4e\n", vgas, velocity[1], velocity[2], velocity[5], velocity[6]);
+        ierr = doDustGasDrag_cell(rpars[0], &vgas, cs, 0.5*dt); 
+        if(verbose) printf("drag) %.4e %.4e %.4e %.4e %.4e\n", vgas, velocity[1], velocity[2], velocity[5], velocity[6]);
+        rpars[4] = vgas;
 #endif
         // update time
         time_dust = time_dust + dt;
@@ -528,8 +543,13 @@ int setBinsCell(int icell, double *Mtot){
 
         // Total number in bin stored as mass density 
         mass = ustate[icell*nvar + IDUST_START + NdustVar*idx];
+        if(mass <= 0){
+            number[ibin] = 0;
+            velocity[ibin] = 0;
+            slope[ibin] = 0;
+            continue;
+        } 
         // current slope assuming piecewise linear dnumda
-        slope[ibin]  = ustate[icell*nvar + IDUST_START + NdustVar*idx + 1];
 
         
         // convert to number via total mass in cell
@@ -542,12 +562,27 @@ int setBinsCell(int icell, double *Mtot){
         }
     
         *Mtot = *Mtot + mass;
-        
+        slope[ibin]  = ustate[icell*nvar + IDUST_START + NdustVar*idx + 1];
         number[ibin] = getNumber(slope[ibin], mass/norm, iabin);
 #if defined useDustDynamics || defined growthUpdateVelocities
         velocity[ibin] = ustate[icell * nvar + IDUST_START + NdustVar*idx + 2]/mass;
 #endif
     }
+    number[0] = 0;
+    number[dust_nbins-1] = 0;
+    slope[0] = 0;
+    slope[dust_nbins-1] = 0;
+    velocity[0] = 0;
+    velocity[dust_nbins-1] = 0;
+    if(fSi > 0 && fSi < 1){
+        number[isilicone - 1] = 0;
+        number[isilicone] = 0;
+        slope[isilicone - 1] = 0;
+        slope[isilicone] = 0;
+        velocity[isilicone - 1] = 0;
+        velocity[isilicone] = 0;
+    }
+
     return 1;
 }
 
@@ -577,6 +612,14 @@ int getBinsCell(int icell, double *Mtot){
         }
         // Mass (density) in bin
         mass = getMass(number[ibin], slope[ibin], iabin);
+        if(mass*norm <= 1e-34){
+            ustate[icell*nvar + IDUST_START + NdustVar*idx    ] = 0;
+            ustate[icell*nvar + IDUST_START + NdustVar*idx + 1] = 0;
+#if defined useDustDynamics || defined growthUpdateVelocities
+            ustate[icell*nvar + IDUST_START + NdustVar*idx + 2] = 0;
+            continue;
+#endif
+        }
         *Mtot = *Mtot + mass*norm;
         ustate[icell*nvar + IDUST_START + NdustVar*idx    ] = mass * norm;
         ustate[icell*nvar + IDUST_START + NdustVar*idx + 1] = slope[ibin];
@@ -587,5 +630,5 @@ int getBinsCell(int icell, double *Mtot){
     return 1;
 }
 
-#endif:w
+#endif
 
