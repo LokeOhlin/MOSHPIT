@@ -19,6 +19,9 @@ dist/
 # Package files
 *.jar
 
+#.so filer
+*.so
+
 # Maven
 target/
 dist/
@@ -55,7 +58,7 @@ bin/
 moshpit
 tools/moshpit_utils/moshpit_utils/test_utils/DustyWave/dustywaves.cpython-39-x86_64-linux-gnu.so
 
-Config
+/Config
 
 **output_*
 **dustOut_*
