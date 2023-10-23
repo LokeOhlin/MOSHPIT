@@ -52,7 +52,7 @@ int createOutputFile(int output_id){
         exit(0);
     }
 #ifdef useDust
-    // Mechanical feedback
+    // Dust
     ierr = Dust_initIO();
     if(ierr < 0){
         printf("Error: cannot write dust parameters\n");
