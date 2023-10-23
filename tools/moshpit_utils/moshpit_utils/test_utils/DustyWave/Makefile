@@ -5,6 +5,7 @@
 ##-------------------------------------------------------------------##
 
 F90  = gfortran
+F77  = gfortran
 F2PY = f2py
 F90FLAGS = "-O3 -Wall"
 
@@ -16,7 +17,7 @@ SRC= cubicsolve.f90 dustywaves.f90
 OBJ=$(SRC:.f90=.o)
 
 dustywave: $(SRC)
-	$(F2PY) --f90exec=$(F90) --f90flags=$(F90FLAGS) -c -m dustywaves $(SRC)
+	$(F2PY) --f77exec=$(F77) --f90exec=$(F90) --f90flags=$(F90FLAGS) -c -m dustywaves $(SRC)
 clean:
 	rm *.o *.mod dustywave
 
