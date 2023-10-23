@@ -252,6 +252,9 @@ c
       call calc_xray(NH_ext, abe, xr_ion, xr_heat)
       xr_ion  = xr_ion  * xray_scaling
       xr_heat = xr_heat * xray_scaling
+#if TESTATOMONLY
+      xr_heat = 0
+#endif
 c
 c Rates for recombination on grain surfaces. These rates must be 
 c computed here because of their dependence on the electron number
@@ -313,7 +316,7 @@ c
       else
 #ifdef TESTATOMONLY
       ydot(ihp) = (ch11 * abe   * abHI          ! Collisional ion: H  + e-
-     $          -  ch13 * abhp  * abe) * yn     ! Grain H recomb.
+     $            -ch13 * abhp  * abe) * yn     ! Grain H recomb.
      $          + phih  * abHI ! ionisation rate
       ydot(ih2) = 0
 #else
@@ -491,6 +494,9 @@ c Photoion. heating rate is heating per ion event times recombination rate
 c Also need to include recomb. cooling
         rec_cool = kboltz * temp * abhp * (ch13 * abe+ h_gr)*yn**2.e0
       endif
+#ifdef TESTATOMONLY
+      ylam=0.e0
+#else
 c
 c Initialize all abundances to zero, then just set the non-zero ones
 c
@@ -526,9 +532,6 @@ c
       call cool_func(temp, yn, L_jeans, divv, G_dust, abundances, ylam,
      $               rates, 0)
 c
-
-#ifdef TESTATOMONLY
-      ylam=0.e0
 #endif
 c CB: hvphih term is photoionisation heating
       ydot(itmp) = -(ylam + ylam_chem) + (xr_heat + hvphih) * abHI * yn
