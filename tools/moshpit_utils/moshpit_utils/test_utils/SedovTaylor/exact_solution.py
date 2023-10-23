@@ -14,6 +14,17 @@ xi0 = 1.1515
 def get_position(time, dens0, Einjection):
     rad_shock = xi0 * (Einjection * time**2 / dens0 )**(1/5)
     return rad_shock
+
+def get_shockparams(time, dens0, Einjection, gamma):
+    vel_shock = 2./5. * xi0  * (Einjection / dens0/time**3)**(1/5)
+    rad_shock = xi0 * (Einjection * time**2 / dens0 )**(1/5)
+
+    dennorm = 4*dens0
+    velnorm = 2*vel_shock / (gamma + 1)
+    prenorm = 2*dens0 * vel_shock**2 /(gamma + 1)
+    
+    return rad_shock, dennorm, vel_shock, prenorm
+
 def get_solution(time, dens0, Einjection, gamma):
     vel_shock = 2./5. * xi0  * (Einjection / dens0/time**3)**(1/5)
     rad_shock = xi0 * (Einjection * time**2 / dens0 )**(1/5)
