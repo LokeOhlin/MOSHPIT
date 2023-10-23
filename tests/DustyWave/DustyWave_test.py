@@ -2,10 +2,12 @@ import moshpit_utils.test_utils.DustyWave.dustywaves as dustywaves
 import moshpit_utils.units.cgs as cgs
 import moshpit_utils.dust_utils as dust_utils
 from moshpit_utils import set_parameter, current_time
+from moshpit_utils.python_utils import color_scheme, label_scheme, get_figure_parameters
 
 import h5py as hp
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 import os
 import sys
 import subprocess
@@ -48,9 +50,10 @@ ap.add_argument('--cs'  , default = 1, type = float)
 ap.add_argument('--lam' , default = 1, type = float)
 ap.add_argument('--amp' , default = 1e-4, type = float)
 ap.add_argument('--xmax' , default = 1, type = float)
-ap.add_argument('--tmax', default = 1, type = float)
-ap.add_argument('--dtout', default = 0.5, type = float)
+ap.add_argument('--tmax', default = 2, type = float)
+ap.add_argument('--dtout', default = 1, type = float)
 ap.add_argument('--no_recompile', action = "store_true")
+ap.add_argument('--no_rerun', action = "store_true")
 args=ap.parse_args()
 
 #####
@@ -75,17 +78,7 @@ if not args.no_recompile:
     # Change back to cwd
     os.chdir(cwd)
 
-
-# Make sure rundir exists
-if not os.path.exists("rundir/"):
-    os.makedirs("rundir/")
-
-# copy default simulation.par
-subprocess.run(["cp", args.moshpit_dir + "tests/DustyWave/simulation.par", "rundir/"])
-
-# move into rundir
-os.chdir("rundir")
-
+    
 #unpack all parameters
 Kamp = args.Kamp
 drag_dt  = args.drag_dt
@@ -103,44 +96,60 @@ dtout = args.dtout
 dust_to_gas = rhod/rhog * 100
 # calculate constant
 drag_const = Kamp
+# Make sure rundir exists
+if not os.path.exists("rundir/"):
+    os.makedirs("rundir/")
 
-# Set parameters 
-set_parameter("simulation.par", "tend", tmax)
-set_parameter("simulation.par", "dtOut", dtout)
-set_parameter("simulation.par", "dens_init", rhog)
-set_parameter("simulation.par", "cs_init", cs)
-set_parameter("simulation.par", "ch_dust_to_gas_ratio", dust_to_gas)
-set_parameter("simulation.par", "dust_drag_const", drag_const)
 
-set_parameter("simulation.par", "wave_vel_amplitude", amp)
-set_parameter("simulation.par", "wave_rho_amplitude", amp)
-set_parameter("simulation.par", "wave_vel_wavelength", lam)
-set_parameter("simulation.par", "wave_rho_wavelength", lam)
-
-set_parameter("simulation.par", "rR", xmax)
-
-# remove any previous outputs
-files = glob.glob("output_*")
-if len(files) > 0:
-    subprocess.run(["rm", "-f"]+ files)
-
-# run
-subprocess.run([args.moshpit_dir + "/moshpit"])
+# move into rundir
+os.chdir("rundir")
+    
+if not args.no_rerun:
+    # copy default simulation.par
+    subprocess.run(["cp", args.moshpit_dir + "tests/DustyWave/simulation.par", "./"])
+    # Set parameters 
+    set_parameter("simulation.par", "tend", tmax)
+    set_parameter("simulation.par", "dtOut", dtout)
+    set_parameter("simulation.par", "dens_init", rhog)
+    set_parameter("simulation.par", "cs_init", cs)
+    set_parameter("simulation.par", "ch_dust_to_gas_ratio", dust_to_gas)
+    set_parameter("simulation.par", "dust_drag_const", drag_const)
+    
+    set_parameter("simulation.par", "wave_vel_amplitude", amp)
+    set_parameter("simulation.par", "wave_rho_amplitude", amp)
+    set_parameter("simulation.par", "wave_vel_wavelength", lam)
+    set_parameter("simulation.par", "wave_rho_wavelength", lam)
+    
+    set_parameter("simulation.par", "rR", xmax)
+    
+    # remove any previous outputs
+    files = glob.glob("output_*")
+    if len(files) > 0:
+        subprocess.run(["rm", "-f"]+ files)
+    
+    # run
+    subprocess.run([args.moshpit_dir + "/moshpit"])
 
 # process outputs
 files = sorted(glob.glob("output_*"))
 files = files[:-1]
 nfiles = len(files)
 if nfiles <= 3:
-    fig, axes = plt.subplots(figsize = (2*nfiles,4), nrows = nfiles, ncols = 2, sharex = True)
+    nrows = nfiles
+    ncols = 1
 else:
-    fig, axes = plt.subplots(figsize = (6,4), nrows = 3, ncols = 2, sharex = True)
-if len(axes.shape) == 1:
-    axes = [axes]
+    nrows = 3
+    ncols = 1
+
+
+figsize, subplots_pars = get_figure_parameters(ncols,nrows, sharex = True, sharey =True)
+fig, axes = plt.subplots(nrows = nrows, ncols = ncols, figsize = figsize, sharex = True, sharey =True)
+plt.subplots_adjust(**subplots_pars)
+#if len(axes.shape) == 1:
+#    axes = [axes]
 
 # number of markers
 nmarks = 25
-
 for ifile, fname in enumerate(files):
     hfile = hp.File(fname, "r")
     time = current_time(hfile)
@@ -149,78 +158,66 @@ for ifile, fname in enumerate(files):
     # exact values
     vgas_e, vdust_e, rhogas_e, rhodust_e = get_exact(time, amp, cs, Kamp, lam, 0, rhog, rhod, xplot)
     
-    if ifile == 0 :
-        iax = 0
-    elif ifile == nfiles//2 and nfiles > 2:
-        iax = 1
-    elif ifile == nfiles - 1:
-        iax = 2
-    else:
-        iax = -1
+    dmark = len(xplot)//nmarks
+    # Velocity
+    axes[ifile].plot(xplot, vgas_e/1e-4, c = color_scheme["gas_analytic"])
+    axes[ifile].plot(xplot[::dmark], vgas_s[::dmark]/1e-4, c = color_scheme["gas"],ls = "", marker = "x")
+    axes[ifile].plot(xplot, vdust_e/1e-4, c = color_scheme["dust_analytic"])
+    axes[ifile].plot(xplot[::dmark], vdust_s[::dmark]/1e-4, c = color_scheme["dust"], ls = "", marker = "x")
+    axes[ifile].text(0.05, -0.8, "time = %d"%int(time))
+   
+    # Density
+    #axes[ifile,1].plot(xplot[::dmark], rhogas_s[::dmark], c = color_scheme["gas"], marker = "x")
+    #axes[ifile,1].plot(xplot, rhogas_e, c = color_scheme["gas_analytic"])
+    #axes[ifile,1].plot(xplot[::dmark], rhodust_s[::dmark], c = color_scheme["dust"], marker = "x")
+    #axes[ifile,1].plot(xplot, rhodust_e, c = color_scheme["dust_analytic"])
 
-    if iax >= 0:
-        print(ifile, iax, fname)
-        dmark = len(xplot)//nmarks
-        # Velocity
-        axes[iax,0].plot(xplot[::dmark], vgas_s[::dmark], c = "navy", marker = "x")
-        axes[iax,0].plot(xplot, vgas_e, c = "navy")
-        axes[iax,0].plot(xplot[::dmark], vdust_s[::dmark], c = "orange", marker = "x")
-        axes[iax,0].plot(xplot, vdust_e, c = "orange")
-        
-        # Density
-        axes[iax,1].plot(xplot[::dmark], rhogas_s[::dmark], c = "navy", marker = "x")
-        axes[iax,1].plot(xplot, rhogas_e, c = "navy")
-        axes[iax,1].plot(xplot[::dmark], rhodust_s[::dmark], c = "orange", marker = "x")
-        axes[iax,1].plot(xplot, rhodust_e, c = "orange")
 
-        axes[iax,0].text(np.max(xplot)*0.05, max(np.max(vgas_e), np.max(vgas_s))* 0.9, "t = %.4e"%time)
-
-        axes[iax,0].set_ylim(-amp*1.05, amp*1.05)
-        #axes[iax,1].set_ylim(rhog-amp*1.05, rhog+amp*1.05)
+    #axes[ifile,1].set_ylim(rhog-amp*1.05, rhog+amp*1.05)
 
 # set labels and legends
 # xlabel
-axes[-1,0].set_xlabel("position [code units]")
-axes[-1,1].set_xlabel("position [code units]")
+axes[-1].set_ylim(-1.15, 1.15)
+axes[-1].set_xlabel(r"$x$ [code units]")
 
 # ylabel
-axes[len(axes)//2,0].set_ylabel("velocity [code units]")
-axes[len(axes)//2,1].set_ylabel("density [code units]")
+axes[1].set_ylabel(r"$%s/A,\,%s/A$ [code units]"%(label_scheme["vgas"], label_scheme["vdust"]))
+#axes[1,0 ].set_ylabel("density [code units]")
 
 # legend
-axes[0,0].plot([],[], c = "navy", label = "gas")
-axes[0,0].plot([],[], c = "orange", label = "dust")
-axes[0,0].legend()
-
+axes[0].plot([],[], marker = "x", c = color_scheme["gas_analytic"], mfc = color_scheme["gas"], mec = color_scheme["gas"], label = "Gas")
+axes[0].plot([],[], marker = "x", c = color_scheme["dust_analytic"], mfc = color_scheme["dust"], mec = color_scheme["dust"], label = "Dust")
+axes[0].legend()
+plt.savefig("DustyWave.pdf")
 plt.show()
 
-for ifile, fname in enumerate(files):
-    hfile = hp.File(fname, "r")
-    time = current_time(hfile)
-    # Simulated values
-    xplot, vgas_s, vdust_s, rhogas_s, rhodust_s = get_simulated(hfile)
-    # exact values
-    vgas_e, vdust_e, rhogas_e, rhodust_e = get_exact(time, amp, cs, Kamp, lam, 0, rhog, rhod, xplot)
-
-    fig, axes = plt.subplots(figsize = (6,4), nrows = 1, ncols = 2, sharex = True)
-    print(ifile, iax, fname)
-    dmark = len(xplot)//nmarks
-    # Velocity
-    axes[0].plot(xplot[::dmark], vgas_s[::dmark], c = "navy", marker = "x")
-    axes[0].plot(xplot, vgas_e, c = "navy")
-    axes[0].plot(xplot[::dmark], vdust_s[::dmark], c = "orange", marker = "x")
-    axes[0].plot(xplot, vdust_e, c = "orange")
-    
-    # Density
-    axes[1].plot(xplot[::dmark], rhogas_s[::dmark], c = "navy", marker = "x")
-    axes[1].plot(xplot, rhogas_e, c = "navy")
-    axes[1].plot(xplot[::dmark], rhodust_s[::dmark], c = "orange", marker = "x")
-    axes[1].plot(xplot, rhodust_e, c = "orange")
-
-    axes[0].text(np.max(xplot)*0.05, max(np.max(vgas_e), np.max(vgas_s))* 0.9, "t = %.4e"%time)
-
-    axes[0].set_ylim(-amp*1.05, amp*1.05)
-    axes[1].set_ylim(rhog-amp*1.05, rhog+amp*1.05)
-
-    plt.savefig("plot_"+fname[-4:]+".png")
-    plt.close(fig)
+#for ifile, fname in enumerate(files):
+#    hfile = hp.File(fname, "r")
+#    time = current_time(hfile)
+#    # Simulated values
+#    xplot, vgas_s, vdust_s, rhogas_s, rhodust_s = get_simulated(hfile)
+#    # exact values
+#    vgas_e, vdust_e, rhogas_e, rhodust_e = get_exact(time, amp, cs, Kamp, lam, 0, rhog, rhod, xplot)
+#
+#    fig, axes = plt.subplots(figsize = (6,4), nrows = 1, ncols = 2, sharex = True)
+#    print(ifile, iax, fname)
+#    dmark = len(xplot)//nmarks
+#    # Velocity
+#    axes[0].plot(xplot[::dmark], vgas_s[::dmark], c = "navy", marker = "x")
+#    axes[0].plot(xplot, vgas_e, c = "navy")
+#    axes[0].plot(xplot[::dmark], vdust_s[::dmark], c = "orange", marker = "x")
+#    axes[0].plot(xplot, vdust_e, c = "orange")
+#    
+#    # Density
+#    axes[1].plot(xplot[::dmark], rhogas_s[::dmark], c = "navy", marker = "x")
+#    axes[1].plot(xplot, rhogas_e, c = "navy")
+#    axes[1].plot(xplot[::dmark], rhodust_s[::dmark], c = "orange", marker = "x")
+#    axes[1].plot(xplot, rhodust_e, c = "orange")
+#
+#    axes[0].text(np.max(xplot)*0.05, max(np.max(vgas_e), np.max(vgas_s))* 0.9, "t = %.4e"%time)
+#
+#    axes[0].set_ylim(-amp*1.05, amp*1.05)
+#    axes[1].set_ylim(rhog-amp*1.05, rhog+amp*1.05)
+#
+#    plt.savefig("plot_"+fname[-4:]+".png")
+#    plt.close(fig)
