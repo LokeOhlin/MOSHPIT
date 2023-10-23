@@ -169,34 +169,35 @@ int getSputYield_idv(double vdust, int ida, int graphite) {
 double getSputYield_vel_t(double tgas, int graphite, int ida, int idv, int *idt){
     int idtm, idtp;
     int idxm, idxp;
+    double tm, dt, Ym, dY, tfrac, Yfrac;
     // point to correct tables
-    // if below tabulated values take as 0 (Should be valid for Tmin < 5000K)
+    // if below tabulated values take as T=Tmin
     if (tgas < sput_yield_tab_minTgas){
-        return 0;
-    } 
-    // if above, use simple linear extrapolation (should probably be
-    if(tgas > sput_yield_tab_maxTgas){
-        idxm = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt + sput_tab_nt - 1;
+        idxm = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt;
         if(graphite){
             return sput_yield_tab_yield_g[idxm];
         } else {
             return sput_yield_tab_yield_s[idxm];
         }
-    }
-    if(*idt > 0){
-        idtm = *idt;
+    }  
+    // if above, interpolate outward
+    if(tgas > sput_yield_tab_maxTgas){
+        idxm = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt + sput_tab_nt - 1;
     } else {
-        idtm = getSputYield_idt(tgas, graphite);
-        *idt = idtm;
+        if(*idt > 0){
+            idtm = *idt;
+        } else {
+            idtm = getSputYield_idt(tgas, graphite);
+            *idt = idtm;
+        }
     }
     idtp = idtm + 1;
 
     idxm = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt + idtm;
     idxp = ida*sput_tab_nt*sput_tab_nv + idv*sput_tab_nt + idtp;
 
-    double tm = sput_yield_tab_tgas[idtm];
-    double dt = sput_yield_tab_tgas[idtp] - tm;
-    double Ym, dY;
+    tm = sput_yield_tab_tgas[idtm];
+    dt = sput_yield_tab_tgas[idtp] - tm;
     if(graphite){ 
         Ym = sput_yield_tab_yield_g[idxm];
         dY = sput_yield_tab_yield_g[idxp] - Ym;
@@ -205,11 +206,23 @@ double getSputYield_vel_t(double tgas, int graphite, int ida, int idv, int *idt)
         dY = sput_yield_tab_yield_s[idxp] - Ym;
     }
     return Ym + (tgas - tm) * dY/dt;
+
+    tm = sput_yield_tab_tgas[idtm];
+    tfrac = sput_yield_tab_tgas[idtp] / tm;
+    if(graphite){ 
+        Ym = sput_yield_tab_yield_g[idxm];
+        Yfrac = sput_yield_tab_yield_g[idxp] / Ym;
+    } else {
+        Ym = sput_yield_tab_yield_s[idxm];
+        Yfrac = sput_yield_tab_yield_s[idxp] / Ym;
+    }
+    return Ym*pow(tgas/tm, log(Yfrac)/log(tfrac));
 }
 
 double getSputYield_vel_v(double vdust, double tgas, int graphite, int ida, int *idt){
     int idvm, idvp;
     double *vdusts;
+    double vm, dv, Ym, dY, Yfrac, vfrac;
     if(graphite){
         vdusts = sput_yield_tab_vdust_g;
     } else {
@@ -223,13 +236,21 @@ double getSputYield_vel_v(double vdust, double tgas, int graphite, int ida, int 
         printf(".... %.4e %.4e %d %d\n", vdust, vdusts[ida*sput_tab_nv + sput_tab_nv - 1], idvm, sput_tab_nv);
         return 0;
     }
-    double vm = vdusts[ida*sput_tab_nv + idvm];
-    double dv = vdusts[ida*sput_tab_nv + idvp] - vm;
+    vm = vdusts[ida*sput_tab_nv + idvm];
+    dv = vdusts[ida*sput_tab_nv + idvp] - vm;
     
-    double Ym = getSputYield_vel_t(tgas, graphite, ida, idvm, idt);
-    double dY = getSputYield_vel_t(tgas, graphite, ida, idvp, idt);
+    Ym = getSputYield_vel_t(tgas, graphite, ida, idvm, idt);
+    dY = getSputYield_vel_t(tgas, graphite, ida, idvp, idt) - Ym;
 
-    return Ym + (vdust - vm)* dY/dv;
+    Ym + (vdust - vm)* dY/dv;
+    
+    vm = vdusts[ida*sput_tab_nv + idvm];
+    vfrac = vdusts[ida*sput_tab_nv + idvp] / vm;
+    
+    Ym = getSputYield_vel_t(tgas, graphite, ida, idvm, idt);
+    Yfrac = getSputYield_vel_t(tgas, graphite, ida, idvp, idt) / Ym;
+
+    return Ym * pow(vdust/vm, log(Yfrac) / log(vfrac));
 }
 
 
@@ -248,6 +269,7 @@ double getSputYield_vel(double agrain, double vdust, double tgas, int graphite, 
     //      double yield  - <Yv> where Y is the sputtering yeild and the average is over the maxwellian distribution for a given temperature
     //////////////////////////////////////////////////
     int idam, idap;
+    double am, da, Ym, dY, afrac, Yfrac;
     // if outside range simple linear extrapolation
     if(*ida > 0){
         idam = *ida;
@@ -256,12 +278,19 @@ double getSputYield_vel(double agrain, double vdust, double tgas, int graphite, 
         *ida = idam;
     }
     idap = idam + 1;
-    double am = sput_yield_tab_agrain[idam];
-    double da = sput_yield_tab_agrain[idap] - am;
+    am = sput_yield_tab_agrain[idam];
+    da = sput_yield_tab_agrain[idap] - am;
 
-    double Ym = getSputYield_vel_v(vdust, tgas, graphite, idam, idt);
-    double dY = getSputYield_vel_v(vdust, tgas, graphite, idap, idt) - Ym;
-    return Ym + (agrain - am) * dY/da; 
+    Ym = getSputYield_vel_v(vdust, tgas, graphite, idam, idt);
+    dY = getSputYield_vel_v(vdust, tgas, graphite, idap, idt) - Ym;
+    Ym + (agrain - am) * dY/da; 
+    
+    am = sput_yield_tab_agrain[idam];
+    afrac = sput_yield_tab_agrain[idap]/am;
+
+    Ym = getSputYield_vel_v(vdust, tgas, graphite, idam, idt);
+    Yfrac = getSputYield_vel_v(vdust, tgas, graphite, idap, idt) / Ym;
+    Ym * pow(agrain/am, log(Yfrac)/log(afrac)); 
 }
 
 
