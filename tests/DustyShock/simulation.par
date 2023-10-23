@@ -9,10 +9,11 @@ tend = 1e0
 dt_init = 1e-3
 dt_max  = 1e-3
 
+interpolator = 1
 geometry = 0
 rR = 0.5
 rL = -0.5
-ncells = 512
+ncells = 256
 left_bound = 3
 right_bound = 3
 

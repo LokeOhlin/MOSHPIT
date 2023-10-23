@@ -1,7 +1,8 @@
 from moshpit_utils.test_utils.SodShockTube import solve_sodshock, soundspeed_dust
 import moshpit_utils.units.cgs as cgs
 import moshpit_utils.dust_utils as dust_utils
-from moshpit_utils import set_parameter, current_time
+from moshpit_utils import set_parameter, get_parameter, current_time
+from moshpit_utils.python_utils import color_scheme, label_scheme, get_figure_parameters
 
 import h5py as hp
 import numpy as np
@@ -70,48 +71,62 @@ def run_simulation(kamp, args, simname):
     # run
     subprocess.run([args.moshpit_dir + "/moshpit"])
     # process outputs
-    files = sorted(glob.glob("output_*"))[1:]
-    print(files)
-    
+    files = np.atleast_1d(sorted(glob.glob("output_*"))[-1])
+    nplot = 1024
     for ifile, fname in enumerate(files):
         hfile = hp.File(fname, "r")
+        dust_to_gas = get_parameter(hfile, "ch_dust_to_gas_ratio")
         time = current_time(hfile)
         # Simulated values
         xplot, rhogas, vgas, pgas, egas, rhodust, vdust = get_simulated(hfile)
+        #plot point frequency
+        dplot = max(int(len(xplot)/nplot), 1)
+        xplot = xplot[::dplot]
+        rhogas = rhogas[::dplot]
+        vgas = vgas[::dplot]
+        pgas = pgas[::dplot]
+        egas = egas[::dplot]
+        rhodust = rhodust[::dplot]
+        vdust = vdust[::dplot]
         # exact values
-        dens, velo, pres, eint = get_exact(time, P0, P1, 1, gamma, xplot)
-        
-        fig, axes = plt.subplots(nrows = 2, ncols = 2, sharex = True)
-        axes[0,0].plot(xplot,rhogas,  c = "navy", marker = "o")
-        axes[0,0].plot(xplot,rhodust, c = "navy", marker = "x")
-        axes[0,0].plot(xplot,dens, c = "r")
-        axes[0,0].set_ylim(0.095, 1.1)
-        axes[0,0].set_ylabel("Density [code units]")
+        dens, velo, pres, eint = get_exact(time, P0, P1, dust_to_gas/100, gamma, xplot)
+       
+        nrows = 2
+        ncols = 2
 
-        axes[0,1].plot(xplot,vgas,  c = "navy", marker = "o")
-        axes[0,1].plot(xplot,vdust, c = "navy", marker = "x")
-        axes[0,1].plot(xplot,velo, c = "r")
+        figsize, subplots_pars = get_figure_parameters(ncols,nrows, sharex = True)
+        fig, axes = plt.subplots(nrows = nrows, ncols = ncols, figsize = figsize, sharex = True)
+        plt.subplots_adjust(**subplots_pars)
+        axes[0,0].plot(xplot,rhogas,  c = color_scheme["gas"], marker = "o")
+        axes[0,0].plot(xplot,rhodust, c = color_scheme["dust"], marker = "x")
+        axes[0,0].plot(xplot,dens, c = color_scheme["gas_analytic"])
+        axes[0,0].set_ylim(-0.1, 1.1)
+        axes[0,0].set_ylabel(r"$%s,\,%s$ [code units]"%(label_scheme["rhogas"],label_scheme["rhodust"]))
+
+        axes[0,1].plot(xplot,vgas,  c = color_scheme["gas"], marker = "o")
+        axes[0,1].plot(xplot,vdust, c = color_scheme["dust"], marker = "x")
+        axes[0,1].plot(xplot,velo, c = color_scheme["gas_analytic"])
         axes[0,1].set_ylim(-0.1, 0.9)
-        axes[0,1].text(-0.4, 0.8, "t = %.4e"%time)
-        axes[0,1].set_ylabel("velocity [code units]")
+        axes[0,1].set_ylabel(r"$%s,\,%s$ [code units]"%(label_scheme["vgas"],label_scheme["vdust"]))
         
-        axes[1,0].plot(xplot,pgas,  c = "navy", marker = "o")
-        axes[1,0].plot(xplot,pres, c = "r")
-        axes[1,0].set_ylabel("Pressure [code units]")
-        axes[1,0].set_ylim(0.05, 1.1)
+        axes[1,0].plot(xplot,pgas,  c = color_scheme["gas"], marker = "o")
+        axes[1,0].plot(xplot,pres, c = color_scheme["gas_analytic"])
+        axes[1,0].set_ylabel(r"$%s$ [code units]"%label_scheme["pres"])
+        axes[1,0].set_ylim(-0.1, 1.1)
         
-        axes[1,1].plot(xplot,egas,  c = "navy", marker = "o")
-        axes[1,1].plot(xplot,eint, c = "r")
+        axes[1,1].plot(xplot,egas,  c = color_scheme["gas"], marker = "o")
+        axes[1,1].plot(xplot,eint, c = color_scheme["gas_analytic"])
         axes[1,1].set_xlim(-0.55, 0.55)
         axes[1,1].set_ylim(0.85, 2.3)
-        axes[1,1].set_ylabel("internal energy [code units]")
+        axes[1,1].set_ylabel(r"$%s$ [code units]"%label_scheme["eint"])
         
 
-        axes[-1,0].set_xlabel("position [code units]")
-        axes[-1,1].set_xlabel("position [code units]")
-   
+        axes[0,1].text(-0.4, 0.8, "$t = %.2f$"%time)
+        axes[-1,0].set_xlabel(r"$x$ [code units]")
+        axes[-1,1].set_xlabel(r"$x$ [code units]")
+
         print(simname+"_"+fname[-4:]+ ".png")
-        plt.savefig(simname+"_"+fname[-4:]+ ".png")
+        plt.savefig(simname+"_"+fname[-4:]+ ".pdf")
         plt.show()
         plt.close(fig)
     os.chdir(cwd)
@@ -126,7 +141,7 @@ ap.add_argument('--moshpit_dir', default = cwd+"/../../")
 ap.add_argument('--gamma', default = 5/3, type = float)
 ap.add_argument('--drag_dt', default = 1e-2, type = float)
 ap.add_argument('--tmax', default = 0.2, type = float)
-ap.add_argument('--dtout', default = 10, type = float)
+ap.add_argument('--dtout', default = 0.2, type = float)
 ap.add_argument('--no_recompile', action = "store_true")
 args=ap.parse_args()
 
