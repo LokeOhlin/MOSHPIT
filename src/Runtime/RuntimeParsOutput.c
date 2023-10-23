@@ -32,7 +32,6 @@ int RuntimePars_initIO(){
 
 int RuntimePars_output(){
     int ierr;
-    double time_out;
     // write specific headers
     // This time has not yet been advanced. Add dt to make in sync
     ierr = my_writeAttribute("/Headers", "time", &timeOut, H5T_NATIVE_DOUBLE); 
