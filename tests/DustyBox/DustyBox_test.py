@@ -8,7 +8,7 @@ import os
 
 from moshpit_utils.dust_utils import dustDensity
 from moshpit_utils import set_parameter, current_time
-
+from moshpit_utils.python_utils import color_scheme, label_scheme, get_figure_parameters
 
 def check_makefile(path):
     with open(path, "r") as f:
@@ -57,13 +57,13 @@ ap.add_argument('--drag_mode', default = [1],nargs = "+", type = int)
 
 ap.add_argument('--drag_dt', default = 1e-2, type = float)
 ap.add_argument('--rhog', default = 1, type = float)
-ap.add_argument('--rhod', default = 1e-2, type = float)
+ap.add_argument('--rhod', default = 1, type = float)
 ap.add_argument('--velg', default = 0, type = float)
 ap.add_argument('--veld', default = 1, type = float)
 
 
-ap.add_argument('--tmax', default = 5e-2, type = float)
-ap.add_argument('--dtout', default = 2.5e-3, type = float)
+ap.add_argument('--tmax', default =2.0, type = float)
+ap.add_argument('--dtout', default = 2.5e-1, type = float)
 ap.add_argument('--no_recompile', action = "store_true")
 args=ap.parse_args()
 
@@ -116,16 +116,16 @@ set_parameter("simulation.par", "dust_drag_dtmax_fact", args.drag_dt)
 
 
 
-Ks    = args.Kamp
-pars  = args.drag_par
-modes = args.drag_mode 
+Ks    = [1,1]
+pars  = [1,10]
+modes = [1,4] 
 
 nruns = 1
 
 if len(Ks) == 1:
     kamp = Ks[0]
 else:
-    nruns = len(Ks[0])
+    nruns = len(Ks)
 if len(pars) == 1:
     par = pars[0]
 else:
@@ -144,8 +144,15 @@ else:
 
 
 
+line_styles = ["solid", "dotted", "dashed", "dashdot"]
+markers = ["o", "x", ".", "+"]
 
-fig, axes = plt.subplots(nrows = 1, ncols = 2, figsize = (8,4))
+
+figsize, subplots_pars = get_figure_parameters(1,1)
+fig, axes = plt.subplots(nrows = 1, ncols = 1, figsize = figsize)
+plt.subplots_adjust(**subplots_pars)
+axes = [axes]
+tana = np.linspace(0, args.tmax)
 for irun in range(nruns):
     if len(Ks) > 1:
         kamp = Ks[irun]
@@ -165,15 +172,20 @@ for irun in range(nruns):
     files = glob.glob("output_*")
     files.sort()
     times, vgas_simulated, vdust_simulated = get_simulated(files)
-    vgas_analytic, vdust_analytic = get_analytic(times, kamp, par, vbar, args.velg-args.veld, args.rhog, args.rhod, mode)
+    vgas_analytic, vdust_analytic = get_analytic(tana, kamp, par, vbar, args.velg-args.veld, args.rhog, args.rhod, mode)
     
-    P = axes[0].plot(times, vgas_simulated, ls = "", marker = "o")[0]
-    axes[0].plot(times, vgas_analytic, c = P.get_color())
-    axes[0].plot(times, vdust_simulated, ls = "", marker = "x", c = P.get_color())
-    axes[0].plot(times, vdust_analytic, ls = "--", c = P.get_color())
-    err = np.max((vdust_simulated - vdust_analytic)/vdust_analytic)
-    axes[1].scatter(irun, err, c = P.get_color())    
-    
+    axes[0].plot(tana, vgas_analytic, ls = line_styles[irun], c = color_scheme["gas_analytic"])
+    axes[0].plot(times, vgas_simulated, ls = "", marker = markers[irun], c =  color_scheme["gas"])
+    axes[0].plot(tana, vdust_analytic, ls = line_styles[irun], c = color_scheme["dust_analytic"])
+    axes[0].plot(times, vdust_simulated, ls = "", marker = markers[irun], c = color_scheme["dust"])
+    #err = np.max((vdust_simulated - vdust_analytic)/vdust_analytic)
+    #axes[1].scatter(irun, err, c = P.get_color())    
+axes[0].set_xlabel(r"$t$ [code units]")
+axes[0].set_ylabel(r"$%s,\,%s$ [code units]"%(label_scheme["vgas"], label_scheme["vdust"]))
+axes[0].plot([],[], marker = "o", label  = "Gas", c = color_scheme["gas_analytic"], mfc = color_scheme["gas"], mec = color_scheme["gas"])
+axes[0].plot([],[], marker = "o", label  = "Dust", c = color_scheme["dust_analytic"], mfc = color_scheme["dust"], mec = color_scheme["dust"])
+axes[0].legend()
+plt.savefig("dustyBox.pdf")
 plt.show()
 
 

@@ -21,7 +21,7 @@ init_numd = 0
 dens_init = 1
 velo_init = 0
 dust_velo_init = 1
-ch_dust_to_gas_ratio = 1.0
+ch_dust_to_gas_ratio = 100.0
 
 xH_init   = 1.0
 xH2_init  = 0.0
