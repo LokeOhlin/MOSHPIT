@@ -13,6 +13,7 @@ extern double tend;
 extern double dt_init, dt_max;
 extern double time, dt, timeOut;
 extern int imax;
+extern int verbose;
 extern int nintRTPars, nrealRTPars;
 extern int_list_t *RTIPars;
 extern real_list_t *RTDPars;

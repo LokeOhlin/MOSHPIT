@@ -35,6 +35,9 @@ int geometry; // 0 = 1D carteesian
                   // 1 = 1D Spherical 
 int setup;
 
+int interpolator;  // 0 - MUSCL
+                   // 1 - PPM
+
 int left_bound ;
 double bdensL  ; 
 double bvelL   ; 
@@ -50,12 +53,12 @@ double benerR   ;
 double hy_ethresh;
 
 int NCELLS;
-int NGHOST;
 int NINTER;
 
 double *ustate = NULL;
 double *pstate = NULL;
 double *rs = NULL;
+double *right_edge = NULL;
 double *vol = NULL;
 double *dr = NULL ;
 double *varBuff = NULL;
@@ -92,7 +95,7 @@ int setHydroPars(){
     strcpy(hydroDPars[16].name, "bvelL");       hydroDPars[16].value = 1.; 
     strcpy(hydroDPars[17].name, "benerL");      hydroDPars[17].value = 1.; 
     
-    strcpy(hydroDPars[18].name, "hy_ethresh");  hydroDPars[18].value = 0.01; 
+    strcpy(hydroDPars[18].name, "hy_ethresh");  hydroDPars[18].value = 0.001; 
     
     strcpy(hydroDPars[19].name, "wave_vel_amplitude");  hydroDPars[19].value = 1.0; 
     strcpy(hydroDPars[20].name, "wave_rho_amplitude");  hydroDPars[20].value = 1.0; 
@@ -110,16 +113,17 @@ int setHydroPars(){
     strcpy(hydroDPars[30].name, "ESN_init");      hydroDPars[30].value = 1e51;
     
     // Ints
-    strcpy(hydroIPars[0].name, "ncells");      hydroIPars[0].value = 512;
-    strcpy(hydroIPars[1].name, "nghost");      hydroIPars[1].value = 2;
-    strcpy(hydroIPars[2].name, "geometry");    hydroIPars[2].value = 1;
-    strcpy(hydroIPars[3].name, "left_bound");  hydroIPars[3].value = 0;
-    strcpy(hydroIPars[4].name, "right_bound"); hydroIPars[4].value = 1;
-    strcpy(hydroIPars[5].name, "logspace_cells");       hydroIPars[5].value = 0;
-    strcpy(hydroIPars[6].name, "setup");       hydroIPars[6].value = 0;
-    strcpy(hydroIPars[7].name, "useHydro");    hydroIPars[7].value = 1;
-    strcpy(hydroIPars[8].name, "isothermal");    hydroIPars[8].value = 0;
-    strcpy(hydroIPars[9].name, "init_numd");    hydroIPars[8].value = 1;
+    strcpy(hydroIPars[0].name, "ncells");         hydroIPars[0].value = 512;
+    strcpy(hydroIPars[1].name, "geometry");       hydroIPars[1].value = 1;
+    strcpy(hydroIPars[2].name, "left_bound");     hydroIPars[2].value = 0;
+    strcpy(hydroIPars[3].name, "right_bound");    hydroIPars[3].value = 1;
+    strcpy(hydroIPars[4].name, "logspace_cells"); hydroIPars[4].value = 0;
+    strcpy(hydroIPars[5].name, "setup");          hydroIPars[5].value = 0;
+    strcpy(hydroIPars[6].name, "useHydro");       hydroIPars[6].value = 1;
+    strcpy(hydroIPars[7].name, "isothermal");     hydroIPars[7].value = 0;
+    strcpy(hydroIPars[8].name, "init_numd");      hydroIPars[8].value = 1;
+    strcpy(hydroIPars[9].name, "interpolator");      hydroIPars[9].value = 1;
+
    
     return 1;
 }
@@ -169,15 +173,7 @@ void getintegerhydropar(char *name, int *value){
 int initHydro(){
     // Grid parameters
     getintegerhydropar("ncells", &NCELLS);
-    getintegerhydropar("nghost", &NGHOST);
-#ifdef useDustDynamics
-    if(NGHOST < 3){
-        printf("NOTE: the ROE solver used for dust advection requires NGHOST>=3\n");
-        printf("    : setting NGHOST = 3\n");
-        NGHOST = 3;
-    }
-    getrealhydropar("roe_p", &roe_p);
-#endif 
+    
     //buffer used in outputs
     varBuff = (double *) malloc(NCELLS*sizeof(double));
     
@@ -262,6 +258,7 @@ int init_uniform(){
         eint = numd_init*ch_kb*temp_init/(adi-1);
     }
     for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
+        printf("%d %f \n", icell, dens_init);
         idx = icell*nvar;
         ustate[idx] = dens_init;
         ustate[idx+1] = velo_init*dens_init;
@@ -269,12 +266,11 @@ int init_uniform(){
 #ifdef useChemistry
         xH  = xH_init ;// *(1-rs[icell]/rR);
         xH2 = xH2_init;// *rs[icell]/rR;
-        ustate[idx+ICHEM_START]   = dens_init*xH/mf_scale;
-        ustate[idx+ICHEM_START+1] = dens_init*2*xH2/mf_scale;
-        ustate[idx+ICHEM_START+2] = dens_init*(1-xH-2*xH2)/mf_scale;
-        ustate[idx+ICHEM_START+3] = dens_init*xCO_init/mf_scale;
-        ustate[idx+ICHEM_START+4] = dens_init*(abundC-xCO_init)/mf_scale;
-        ustate[idx+ICHEM_END] = 10.0;
+        ustate[idx+ICHEM_START]   = xH/mf_scale;
+        ustate[idx+ICHEM_START+1] = 2*xH2/mf_scale;
+        ustate[idx+ICHEM_START+2] = (1-xH-2*xH2)/mf_scale;
+        ustate[idx+ICHEM_START+3] = xCO_init/mf_scale;
+        ustate[idx+ICHEM_START+4] = (abundC-xCO_init)/mf_scale;
 #endif
 #ifdef useDust
         dustMass = dust_to_gas_ratio * 1e-2 * ustate[icell*nvar];
@@ -288,6 +284,7 @@ int init_uniform(){
 int init_leftwave(){
     int icell;
     double dens_initL, temp_initL, velo_initL, cs_initL, numd_initL, eint, eintL; 
+    double rL, rR;
     getintegerhydropar("init_numd", &init_numd);
     
     getrealhydropar("dens_init", &dens_init);
@@ -302,6 +299,8 @@ int init_leftwave(){
     getrealhydropar("temp_initL", &temp_initL);
     getrealhydropar("velo_initL", &velo_initL);
     getrealhydropar("cs_initL", &cs_initL);
+    getrealhydropar("rR", &rR); 
+    getrealhydropar("rL", &rL); 
     
     if(init_numd){
         numd_init  = dens_init;
@@ -341,16 +340,19 @@ int init_leftwave(){
     bdensR = dens_init;
     bvelR  = dens_init*velo_init;
     benerR = eint + 0.5*dens_init*velo_init*velo_init;
+#if defined(useDust) || defined(useChemistry)
+    int idx;
+#endif
 #ifdef useDust
     double dustMass, dust_velo_initL;
     double dust_to_gas_ratio;
-    int idx, idust;
+    int idust;
     getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
     getrealdustpar("dust_velo_initL", &dust_velo_initL);
 #endif 
     
     for(icell = 0; icell < NCELLS; icell++ ){
-        if( icell > NGHOST + (NCELLS-2*NGHOST)/2){
+        if( rs[icell] > (rL + rR)*0.5){
             ustate[icell*nvar] = dens_init;
             ustate[icell*nvar + 1] = dens_init*velo_init;
             ustate[icell*nvar + 2] = eint + 0.5*dens_init*velo_init*velo_init;
@@ -362,11 +364,11 @@ int init_leftwave(){
         }
 #ifdef useChemistry
         idx = icell*nvar;
-        ustate[idx+ICHEM_START]   = ustate[icell*nvar]*xH_init/mf_scale;
-        ustate[idx+ICHEM_START+1] = ustate[icell*nvar]*2*xH2_init/mf_scale;
-        ustate[idx+ICHEM_START+2] = ustate[icell*nvar]*(1-xH_init-2*xH2_init)/mf_scale;
-        ustate[idx+ICHEM_START+3] = ustate[icell*nvar]*xCO_init/mf_scale;
-        ustate[idx+ICHEM_START+4] = ustate[icell*nvar]*(abundC-xCO_init)/mf_scale;
+        ustate[idx+ICHEM_START]   = xH_init/mf_scale;
+        ustate[idx+ICHEM_START+1] = 2*xH2_init/mf_scale;
+        ustate[idx+ICHEM_START+2] = (1-xH_init-2*xH2_init)/mf_scale;
+        ustate[idx+ICHEM_START+3] = xCO_init/mf_scale;
+        ustate[idx+ICHEM_START+4] = (abundC-xCO_init)/mf_scale;
         ustate[idx+ICHEM_END] = 10.0;
 #endif
 #ifdef useDust
@@ -426,19 +428,12 @@ int init_sedov(){
     getrealchemistrypar("ch_dust_to_gas_ratio", &dust_to_gas_ratio);
 #endif 
     
-    left_bound = 0;
-    right_bound = 1;
-    geometry = 1; // spherical
-    
-    
-    ESN_init  = ESN_init/(4*M_PI*pow(dr[2],3)/3.); // make into energy density
-    
     for(icell = 0; icell < NCELLS; icell++ ){
         ustate[icell*nvar]   = dens_init;
         ustate[icell*nvar+1] = velo_init;
         ustate[icell*nvar+2] = ener;
         if(icell == NGHOST){
-            ustate[icell*nvar+2] = ener + ESN_init;
+            ustate[icell*nvar+2] = ener + ESN_init/vol[icell];
         }
 
 #ifdef useChemistry
@@ -524,12 +519,13 @@ int init_wave(){
 #ifdef useChemistry
         xH  = xH_init ;// *(1-rs[icell]/rR);
         xH2 = xH2_init;// *rs[icell]/rR;
-        ustate[idx+ICHEM_START]   = dens_cell*xH/mf_scale;
-        ustate[idx+ICHEM_START+1] = dens_cell*2*xH2/mf_scale;
-        ustate[idx+ICHEM_START+2] = dens_cell*(1-xH-2*xH2)/mf_scale;
-        ustate[idx+ICHEM_START+3] = dens_cell*xCO_init/mf_scale;
-        ustate[idx+ICHEM_START+4] = dens_cell*(abundC-xCO_init)/mf_scale;
+        ustate[idx+ICHEM_START]   = xH/mf_scale;
+        ustate[idx+ICHEM_START+1] = 2*xH2/mf_scale;
+        ustate[idx+ICHEM_START+2] = (1-xH-2*xH2)/mf_scale;
+        ustate[idx+ICHEM_START+3] = xCO_init/mf_scale;
+        ustate[idx+ICHEM_START+4] = (abundC-xCO_init)/mf_scale;
         ustate[idx+ICHEM_END] = 10.0;
+
 #endif
 #ifdef useDust
         dustMass = dust_to_gas_ratio * 1e-2 * ustate[icell*nvar];
@@ -552,6 +548,7 @@ int init_grid(){
     getrealhydropar("rR", &rR);
     getrealhydropar("orth_extent", &orth_extent);
     
+    getintegerhydropar("interpolator", &interpolator);
     getintegerhydropar("isothermal", &isothermal);
     if(isothermal == 1){
         getrealhydropar("cs_init", &cs_init);
@@ -565,15 +562,15 @@ int init_grid(){
         if(orth_extent < 0){
             orth_extent = dr_const;
         }
-
+       
         for(icell = 0; icell < NCELLS; icell++){
             rs[icell]  = rL + dr_const*(icell - NGHOST +1./2.);
-            rp = rs[icell] + 0.5*dr_const;
+            right_edge[icell] = rs[icell] + 0.5*dr_const;
             rm = rs[icell] - 0.5*dr_const;
             
             dr[icell]  = dr_const;
             if(geometry == 1){
-                vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
+                vol[icell] = 4.0*M_PI*(pow(right_edge[icell],3.0)-pow(rm,3.0))/3.0;
             } else {
                 vol[icell] = dr_const*orth_extent*orth_extent;
             }
@@ -583,18 +580,28 @@ int init_grid(){
         //  min cells will have their edges outside the bounds
 
         if(rL <= 0){
+            printf("rL = %.4e\n", rL);
             printf("Left edge must be > 0 for logspace distributed cells \n");
             return -1;
         }
         dr_const = exp((log(rR) - log(rL))/(NCELLS - 2 * NGHOST));
         // distribute cell centers
         for(icell = NGHOST; icell < NCELLS; icell++){
-            rs[icell] = rL*pow(dr_const, (icell - NGHOST));
+            right_edge[icell] = rL*pow(dr_const, (icell - NGHOST));
+            if(rs[icell] != rs[icell]){
+                printf("????????? \n");
+                return -1;
+            }
         }
         // set lower ghost cells, reflect around 0
-        for(icell = 0; icell < NGHOST; icell ++){
-                rs[icell] = - rs[2*NGHOST - icell - 1]; 
+        for(icell = 0; icell < NGHOST-1; icell ++){
+            right_edge[icell] = - right_edge[2*NGHOST - icell - 2]; 
+            if(rs[icell] != rs[icell]){
+                printf("????????? \n");
+                return -1;
+            }
         }
+        right_edge[NGHOST - 1] = 0;
 
         // Calculate cell sizes and volumes
         // If we are using 1D cartesian, then we need to make sure that
@@ -606,34 +613,25 @@ int init_grid(){
             orth_extent = dr[NGHOST];
         }
         
-        for(icell = 1; icell < NCELLS - 1; icell++){
-            rp = (rs[icell+1] + rs[icell])*0.5;
-            rm = (rs[icell-1] + rs[icell])*0.5;
+        for(icell = 1; icell < NCELLS; icell++){
+            rp = right_edge[icell];
+            rm = right_edge[icell-1];
             dr[icell]  = rp - rm;
+            rs[icell]  = (rp + rm)*0.5;
             if(geometry == 1){
                 vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
             } else {
                 vol[icell] = dr[icell]*orth_extent*orth_extent;
             }
         }
-        rp = (rs[1] + rs[0])*0.5;
-        rm = rs[0] + (rs[0]-rp);
-        dr[0] = rp-rm;
+        rp = right_edge[0];
+        dr[0] = dr[2*NGHOST];
+        rm = rp - dr[0];
         if(geometry == 1){
-            vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
+            vol[0] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
         } else {
-            vol[icell] = dr[icell]*orth_extent*orth_extent;
+            vol[0] = dr[icell]*orth_extent*orth_extent;
         }
-
-        rm = (rs[NCELLS-1] + rs[NCELLS-2])*0.5;
-        rp = rs[NCELLS-1] + (rs[NCELLS-1]-rm);
-        dr[NCELLS-1] = rp-rm;
-        if(geometry == 1){
-            vol[icell] = 4.0*M_PI*(pow(rp,3.0)-pow(rm,3.0))/3.0;
-        } else {
-            vol[icell] = dr[icell]*orth_extent*orth_extent;
-        }
-
 
     }
    return 1; 
@@ -644,18 +642,34 @@ int init_domain(){
     ustate = (double *) malloc(NCELLS*nvar*sizeof(double));
     pstate = (double *) malloc(NCELLS*nvar*sizeof(double));
     rs     = (double *) malloc(NCELLS*sizeof(double));
+    right_edge     = (double *) malloc(NCELLS*sizeof(double));
     dr     = (double *) malloc(NCELLS*sizeof(double));
     vol    = (double *) malloc(NCELLS*sizeof(double));
 
     ierr = init_grid();
+    if(ierr < 0){
+        return ierr;
+    }
     if(setup == 0){
         ierr = init_uniform();
+        if(ierr < 0){
+            return ierr;
+        }
     } else if(setup == 1){
         ierr = init_leftwave();
+        if(ierr < 0){
+            return ierr;
+        }
     } else if(setup == 2){
         ierr = init_sedov();
+        if(ierr < 0){
+            return ierr;
+        }
     } else if(setup == 3){
         ierr = init_wave();
+        if(ierr < 0){
+            return ierr;
+        }
     } else {
         printf("setup %d not recognised", setup);
         return -1;

@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <hydro.h>
+#include <moshpit.h>
 #ifdef useDust
 #include <dust.h>
 #endif
@@ -12,7 +13,10 @@
 
 
 int getCFL(double *cfl){
-    int icell, idust, idx;
+    int icell, idx;
+#if defined useDustDynamics
+    int idust;
+#endif
     double rho, rhoinv, pre, cs, vel, wspeed;
     if(useHydro == 0){ // if no hydro no cfl
         cfl[0] = 1e99;
@@ -20,18 +24,19 @@ int getCFL(double *cfl){
     }
     *cfl=0; // initially inverted 
     for(icell = NGHOST; icell < NCELLS - NGHOST; icell++){
-        rho = ustate[icell*nvar];
+        idx = icell*nvar;
+        rho = ustate[idx];
         rhoinv = 1/rho;
-
-        vel = ustate[icell*nvar+1]*rhoinv;
+        
+        vel = ustate[idx+1]*rhoinv;
         if(isothermal == 1){
             cs = cs_init;
         } else {
-            pre = (ustate[icell*nvar+2]*rhoinv-0.5*vel*vel)*(adi-1);
+            pre = (ustate[idx+2]*rhoinv-0.5*vel*vel)*(adi-1);
             cs = sqrt(adi*pre);
         }
         wspeed = cs + fabs(vel);
-        *cfl = fmax(wspeed/dr[icell], *cfl);
+        *cfl = fmax(wspeed/dr[icell - 1],fmax(wspeed/dr[icell+1], fmax(wspeed/dr[icell], *cfl)));
 #if defined useDustDynamics || defined growthUpdateVelocities
         for(idust = 0; idust < NdustBins; idust ++){
             idx =  icell*nvar + IDUST_START + idust*NdustVar;
@@ -40,9 +45,6 @@ int getCFL(double *cfl){
                 if(vel != vel){
                     printf("ERROR: NAN VELOCITY \n");
                     exit(0);
-                }
-                if(vel/dr[icell] > *cfl){
-                    printf("%.4e %.4e %.4e\n", vel, ustate[idx], ustate[idx+2]);
                 }
                 *cfl = fmax(vel/dr[icell], *cfl);
             } 
@@ -84,7 +86,7 @@ int setBoundary(){
                     ustate[nvar*ighost + ivar] = ustate[NGHOST*nvar+ivar];
                 }
             } else if(left_bound == 3){ // Periodic
-                ustate[nvar*ighost + ivar] = ustate[(NCELLS - 2*NGHOST + ighost)*nvar  + ivar];
+                ustate[nvar*ighost + ivar] = ustate[MAX(NCELLS - 2*NGHOST + ighost, NGHOST)*nvar  + ivar];
             }
             // Right boundary
             if(right_bound == 0){ // reflective
@@ -112,7 +114,7 @@ int setBoundary(){
                     ustate[(NCELLS - 1 - ighost)*nvar + ivar] = ustate[(NCELLS - NGHOST - 1)*nvar +ivar];
                 }
             } else if(right_bound == 3){ // Periodic
-                ustate[(NCELLS - 1 - ighost)*nvar + ivar] = ustate[(2*NGHOST - 1 - ighost)*nvar + ivar];
+                ustate[(NCELLS - 1 - ighost)*nvar + ivar] = ustate[MIN(2*NGHOST - 1 - ighost, NCELLS-NGHOST-1)*nvar + ivar];
             }
         } 
     }
@@ -142,203 +144,504 @@ int toPrimitive(){
             ekin = 0.5*velx*velx;
             eint = ustate[idx + 2]*rhoinv - ekin;
             pstate[idx + 2]= rho * eint * (adi-1);
+            if(pstate[idx + 2] <= 0){
+                printf("pstate < 0\n");
+                printf("icell %d  \n", icell);
+                printf("eint %.4e \n", eint);
+                printf("etot %.4e \n", ustate[idx + 2]*rhoinv);
+                printf("ekin %.4e \n", ekin);
+                printf("rho  %.4e \n", rho);
+                printf("%.4e\t%.4e\t%.4e\t\n", ustate[idx], ustate[idx+1], ustate[idx+2]);
+                return -1;
+            }
         }
-#ifdef useChemistry
-        // copy over mass fractions
-        for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
+        // copy over advected quantities
+        for(ivar = IADVECT_START; ivar < IADVECT_END; ivar++){
             pstate[idx + ivar] = ustate[idx + ivar];
         }
-#endif 
-#ifdef useDust
+#ifdef useDustDynamics
         for(idust = 0; idust < NdustBins; idust++){
             idx = icell*nvar + IDUST_START + idust*NdustVar;
             // denisty -> density
             pstate[idx] = ustate[idx];
             // slope   -> slope 
             pstate[idx + 1] = ustate[idx + 1];
-#ifdef useDustDynamics
             // momentum -> velocity
-            pstate[idx + 2] = ustate[idx + 2]/ustate[idx];
-#elif defined(growthUpdateVelocitites)
-            // momentum -> momentum (as scalar field)
-            pstate[idx + 2] = ustate[idx + 2];
-#endif
+            if(ustate[idx] > 0){
+                pstate[idx + 2] = ustate[idx + 2]/ustate[idx];
+            } else {
+                pstate[idx + 2] = 0.0;
+            }
         }
 #endif
     }
     return 1;
 }
 
+
 int fixState(){
+#ifdef useChemistry
     int icell, idx, ivar;
     double val;
     for(icell = 0; icell < NCELLS; icell++){
         idx = icell *nvar;
-#ifdef useChemistry
         for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
-            val = fmax(ustate[idx + ivar], 1e-10*ustate[idx]);
+            val = fmax(ustate[idx + ivar], 1e-10);
             ustate[idx + ivar] = val;
         }
-#endif 
     }
+#endif 
     return 1;
 }
 
 double minmod(double a, double b){
     double sign;
-    if( a*b > 0) {
+    if( a*b <= 0) {
         return 0;
     }
     if( fabs(a) > 0 ){
         sign = a/fabs(a);
+    } else if (fabs(b) > 0){
+        sign = b/fabs(b);
     } else {
-        sign = 1;
+        sign = 0.0;
     }
 
     return sign * fmin(fabs(a),fabs(b));
 }
 double maxmod(double a, double b){
     double sign;
-    if( a*b > 0) {
-        return 0;
+    if( a*b <= 0) {
+        return 0.0;
     }
+    printf("a*b = %.4e\n", a,b);
     if( fabs(a) > 0 ){
         sign = a/fabs(a);
+    } else if (fabs(b) > 0){
+        sign = b/fabs(b);
     } else {
-        sign = 1;
+        sign = 0;
     }
 
     return sign * fmax(fabs(a),fabs(b));
 }
-int getTVDSlopes(double *dq, double *dr, double dt){
-    int icell, idx, idxm, idxp, ivar;
-    double dlft, drgt, slope, sigm1, sigm2;
 
+double vanLeer(double a, double b){
+    if (a*b <= 0){
+        return 0.0;
+    }
+    return 2.* a*b/(a+b);
+}
+
+int addGeometricSourceTerms_interfaces(int icell, double *qM, double *qP, double dt){
+    double Sgeo, cssq, twoOverR;
+    int idx, ivar, ierr;
+    if(geometry == 0){
+        return 1;
+    }
+    idx = icell*nvar;
+    twoOverR = 2./fabs(rs[icell]);
+    if(twoOverR != twoOverR){
+        printf(" rs = %.4e\n",rs[icell]);
+        return -1;
+    }  
+    
+    // density = -2rho v/r
+    Sgeo = -pstate[idx]*pstate[idx + 1]*twoOverR;
+    qP[idx] += 0.5*dt*Sgeo;
+    qM[idx] += 0.5*dt*Sgeo;
+
+    // velocity = 0
+
+    // Pressure = -2 cs^2 rho v /r
+    cssq = adi*pstate[idx + 2]/pstate[idx];
+    Sgeo = Sgeo * cssq;
+    qP[idx + 2] += 0.5*dt*Sgeo;
+    qM[idx + 2] += 0.5*dt*Sgeo;
+
+    //// Advected quantities = - 2 var vel/r
+    //for(ivar = IADVECT_START; ivar < IADVECT_END; ivar++){
+    //    Sgeo = -pstate[idx + ivar] * pstate[idx + 1] * twoOverR;
+    //    qP[idx + ivar] += 0.5*dt*Sgeo;
+    //    qM[idx + ivar] += 0.5*dt*Sgeo;
+    //}
+
+#ifdef useDustDynamics
+    ierr = addGeometricSourceTerms_interfaces_dust(icell, qM, qP, dt);    
+#endif 
+
+    return 1;
+}   
+
+
+int addHydroGeometricSourceTerms(int icell, double *qM, double *qP, double dt){
+    double smom, surfp,surfm, rm, rp, vol;
+    int idx;
+    if(geometry == 0){
+        return 1;
+    }
+    rm = right_edge[icell - 1];
+    rp = right_edge[icell];
+    
+    surfm = rm*rm;
+    surfp = rp*rp;
+    
+    vol = (rp*rp*rp -rm*rm*rm)/3.;
+    idx = icell*nvar;
+    // add geometric source terms
+    // Adjusted pressure such that P = constant & u = 0 => static
+    
+    smom = (surfp*qP[idx+2] + surfm*qM[idx+2])/(surfm + surfp);
+    // pstate still not updated so we can freely use
+    //smom = (surfp - surfm) * pstate[idx + 2]/vol;
+    
+    //smom = 2*qstate[idx + 2]/rs[icell];
+    //if(icell < 2*NGHOST){
+    //    printf("%d  %.4e %.4e %.4e %.4e \n",icell, qM[idx+2], qP[idx+2],smom, rs[icell]);
+    //}
+    ustate[idx + 1] = ustate[idx + 1] + 2.0*smom*dt*dr[icell]*rs[icell]/vol;
+    
+    return 1;
+}
+int getEigenVects(int icell, double *leftEigenVects, double *rightEigenVects, double *eigenVals){
+    int idx;
+    double rho, vel, pre, cs;
+    idx = icell*nvar;
+    rho = pstate[idx];
+    vel = pstate[idx + 1];
+    pre = pstate[idx + 2];
+    cs  = sqrt(adi*pre/rho);
+    if(cs != cs || cs <= 0){
+        printf("cs <= 0 \n");
+        printf("cs = %.4e \n", cs);
+        printf("pre = %.4e \n", pre);
+        printf("rho = %.4e \n", rho);
+        return -1; 
+    } 
+    // lambda = vel
+    eigenVals[0] = vel;
+    leftEigenVects[0*3 + 0] = 1.;
+    leftEigenVects[0*3 + 1] = 0;
+    leftEigenVects[0*3 + 2] = -1/(cs*cs);
+    
+    rightEigenVects[0*3 + 0] = 1.;
+    rightEigenVects[1*3 + 0] = 0;
+    rightEigenVects[2*3 + 0] = 0;
+
+    // lambda = vel + cs
+    eigenVals[1] = vel + cs;
+    leftEigenVects[1*3 + 0] = 0;
+    leftEigenVects[1*3 + 1] = 0.5*rho/cs;
+    leftEigenVects[1*3 + 2] = 0.5/(cs*cs);
+    
+    rightEigenVects[0*3 + 1] = 1.;
+    rightEigenVects[1*3 + 1] = cs/rho;
+    rightEigenVects[2*3 + 1] = cs*cs;
+    
+    // lambda = vel - cs
+    eigenVals[2] = vel - cs;
+    leftEigenVects[2*3 + 0] = 0;
+    leftEigenVects[2*3 + 1] = -0.5*rho/cs;
+    leftEigenVects[2*3 + 2] = 0.5/(cs*cs);
+    
+    rightEigenVects[0*3 + 2] = 1.;
+    rightEigenVects[1*3 + 2] = -cs/rho;
+    rightEigenVects[2*3 + 2] = cs*cs;
+    return 1;
+}
+
+
+int getTVDslope(double *dpstate){
+#ifdef useDustDynamics
+    int ierr;
+#endif
+    int icell, idx, idxm, idxp, ivar, icvar;
+    double leftEigenVects[9], rightEigenVects[9], eigenVals[3];
+    double dcenterPrim[3], dminusPrim[3], dplusPrim[3];
+    double dcenterChar, dminusChar, dplusChar, dChar[3];
+    //double sign; 
     // Slopes only made for the inner cells  + ghost cells
     for(icell = 1; icell < NCELLS-1; icell++){
         idx = nvar*icell;
         idxp = nvar*(icell+1);
         idxm = nvar*(icell-1);
-        for(ivar = 0; ivar < nvar; ivar++){
-            // Superbee slope limiter
-            dlft = (pstate[idx  + ivar] - pstate[idxm + ivar])/dr[icell];
-            drgt = (pstate[idxp + ivar] - pstate[idx  + ivar])/dr[icell];
+        
+
+        /*
+         *      Hydrodynamical properties
+         *  
+         *
+         */
+        for(ivar = 0; ivar < 3; ivar++){
+            dcenterPrim[ivar] = 0;
+            dminusPrim[ivar] = 0;
+            dplusPrim[ivar] = 0;
+            dChar[ivar] = 0;
+        }
+
+        // Get Eigenvectors and eigenvalues
+        getEigenVects(icell, leftEigenVects, rightEigenVects, eigenVals);
+
+        // Set diferences in hydro vars
+        for(ivar = 0; ivar < 3; ivar++){
+            dcenterPrim  [ivar]   = 0.5*(pstate[idxp + ivar] - pstate[idxm + ivar]);
+            dminusPrim[ivar] = pstate[idx  + ivar] - pstate[idxm + ivar];
+            dplusPrim [ivar] = pstate[idxp + ivar] - pstate[idx  + ivar];
+        }
+
+        // Project into characteristic variables and apply limiter
+        for(icvar = 0; icvar < 3; icvar++){
+            dcenterChar = 0; 
+            dminusChar  = 0;
+            dplusChar   = 0;
+            for(ivar = 0; ivar < 3; ivar ++){
+                dcenterChar += leftEigenVects[icvar*3 + ivar]*dcenterPrim[ivar]; 
+                dminusChar  += leftEigenVects[icvar*3 + ivar]*dminusPrim[ivar];
+                dplusChar   += leftEigenVects[icvar*3 + ivar]*dplusPrim[ivar];
+            }
+            // slope limiting
+            //if(dcenterChar >= 0){
+            //    sign = 1;
+            //} else {
+            //    sign = -1;
+            //}
+
+            dChar[icvar] = vanLeer(dminusChar, dplusChar); //sign * fmin(2*fabs(dminusChar), fmin(2*fabs(dplusChar), fabs(dcenterChar)));
+            if(dChar[icvar] != dChar[icvar]){
+                printf("Error: Reconstruction gave NaN characteristic slopes\n");
+                printf("icvar = %d\n", icvar);
+                printf("dChar = %.4e\n", dChar[icvar]);
+                printf("dminusChar = %.4e\n", dminusChar);
+                printf("dplusChar = %.4e\n", dplusChar);
+                printf("left eigenvect : ");
+                for(ivar = 0; ivar < 3; ivar++){
+                    printf("%.4e\t", leftEigenVects[icvar*3 + ivar]);
+                }
+                printf("\n");
+                return -1;
+            }
+        }
+
+        // Project back into primitive 
+        for(ivar = 0; ivar < 3; ivar++){
+            dpstate[idx + ivar] = 0;
+            for(icvar = 0; icvar < 3; icvar++){
+                dpstate[idx + ivar] += rightEigenVects[ivar*3 + icvar]*dChar[icvar];
+            }
+            if(dpstate[idx + ivar] != dpstate[idx+ ivar]){
+                printf("Error: Reconstruction gave NaN slopes\n");
+                printf("ivar = %d\n", ivar);
+                printf("dpstate = %.4e\n", dpstate[idx + ivar]);
+                printf("right eigenvect : ");
+                for(icvar = 0; icvar < 3; icvar++){
+                    printf("%.4e\t", rightEigenVects[ivar*3 + icvar]);
+                }
+                printf("\n");
+                printf("dChar : ");
+                for(icvar = 0; icvar < 3; icvar++){
+                    printf("%.4e\t", dChar[icvar]);
+                }
+                printf("\n");
+                return -1;
+            }
+        }
+        
+        
+        /*
+         *
+         *      Advected mass scalars properties
+         *      for these, characteristic quanteties are the same as the primitive and 
+         *      so no eigenvectors are neccesary, and the eigen value is just the velocity
+         *      
+         */
+
+        for(ivar = IADVECT_START; ivar < IADVECT_END; ivar++){
+            // Differences 
+            dminusPrim[0]  = pstate[idx  + ivar] - pstate[idxm + ivar];
+            dplusPrim [0]  = pstate[idxp + ivar] - pstate[idx  + ivar];
             
-            sigm1 = minmod(  drgt,2*dlft);
-            sigm2 = minmod(2*drgt,  dlft);
-            slope = maxmod(sigm1, sigm2);
-            dq[idx + ivar] = slope; 
+            dpstate[idx+ivar] = vanLeer(dminusPrim[0], dplusPrim[0]);
+
         }
     }
-    // set dq to zero on outmost boundary
-    for(ivar = 0; ivar < nvar; ivar++){
-        dq[ivar] = 0;
-        dq[(NCELLS-1)*nvar+ivar]=0;
+#ifdef useDustDynamics
+    ierr = getTVDslopes_dust(dpstate);
+    if(ierr < 0){
+        return ierr;
     }
+#endif
+
     return 1;
 }
 
-int getRiemannStates(double *dq, double *qP, double *qM, double *rs, double *dr, double dt){
-    int icell, idx, ivar;
-    double rho, drhox, Srho;
-    double vel, dvelx, Svel;
-    double pre, dprex, Spre;
-    double qi , dqix , Sqi;
-    double dtdx;
-    // Geometric terms
-    double twooR, drp, drm;
-    for(icell = 1; icell < NCELLS-1; icell++){
-        dtdx = dt/dr[icell];
-        idx = nvar*icell;
-        // Get hydro variables
-        rho = pstate[idx];
-        vel = pstate[idx+1];
-        pre = pstate[idx+2];
-        
-        // Slopes
-        drhox = dq[idx];
-        dvelx = dq[idx+1];
-        dprex = dq[idx+2];
+int reconstructStates(double *qP, double *qM, double dt){
+    int icell, idx, idxm, idxp, ivar, icvar, ierr;
+    double leftEigenVects[9], rightEigenVects[9], eigenVals[3], max_eigenVal, min_eigenVal;
+    double dPrim[nvar], prim6[nvar], primLeft, primRight;
+    double dotProd, dotProdA, dotProdB; 
+    double dtdx, halfdtdx, twothirddtdx, fourthirddtdx_sq;
+    double dpstate[nvar*NCELLS];
 
-        //Source terms 
-        Srho = -vel*drhox - dvelx*rho;
-        Svel = -vel*dvelx - dprex/rho;
-        Spre = -vel*dprex - dvelx*adi*pre;
-
-        // Hydro left & right
-        qM[idx]   = rho - 0.5*drhox + 0.5*Srho*dtdx;
-        qM[idx+1] = vel - 0.5*dvelx + 0.5*Svel*dtdx;
-        qM[idx+2] = pre - 0.5*dprex + 0.5*Spre*dtdx;
-                                                   
-        qP[idx]   = rho + 0.5*drhox + 0.5*Srho*dtdx;
-        qP[idx+1] = vel + 0.5*dvelx + 0.5*Svel*dtdx;
-        qP[idx+2] = pre + 0.5*dprex + 0.5*Spre*dtdx;
-
-        //Geometric source terms if needed
-        if(geometry == 1){
-            drp= rs[icell] + dr[icell]/2;
-            drm= rs[icell] - dr[icell]/2;
-            twooR = 2/fabs(rs[icell]);
-
-            // add geometric source terms to left and right states
-            qM[idx]     = qM[idx]     - rho*vel*twooR * 0.5*dt;
-            qM[idx + 2] = qM[idx + 2] - pre*vel*twooR * 0.5*dt;
+    //
+    // Get initial dW
+    //
+    ierr = getTVDslope(dpstate);
+    if(ierr < 0){
+        return ierr;
+    }
             
-            qP[idx]     = qP[idx]     - rho*vel*twooR * 0.5*dt;
-            qP[idx + 2] = qP[idx + 2] - pre*vel*twooR * 0.5*dt;
-        }
+
+    //
+    // Characteristic tracing 
+    //
+
+    for(icell = 1; icell < NCELLS - 1; icell++){
+        idx = nvar*icell;
+        idxp = nvar*(icell+1);
+        idxm = nvar*(icell-1);
         
-        // other variables left and right
-#ifdef useChemistry
-        for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
-            // cell centered value
-            qi = pstate[idx + ivar];
-            // slope
-            dqix = dq[idx + ivar];
-            //source terms
-            Sqi  = -vel*dqix - dvelx*qi;
+        // Get Eigenvectors and eigenvalues
+        getEigenVects(icell, leftEigenVects, rightEigenVects, eigenVals);
+        
 
-            qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
-            qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
-            // Geometric source term same as for density
-            if(geometry == 1){
-                qM[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
-                qP[idx + ivar] = qP[idx + ivar] - qi*vel*twooR * 0.5 * dt;
+        dtdx = dt/dr[icell];
+        halfdtdx = 0.5*dtdx;
+        twothirddtdx = 2./3.*dtdx;
+        fourthirddtdx_sq = 4./3.*pow(dtdx,2.);
+        
+        if(interpolator == 0) { // Piecewise linear MUSCL
+            for(ivar = 0; ivar < IADVECT_END; ivar ++){
+                qP[idx + ivar] = pstate[idx + ivar];
+                qM[idx + ivar] = pstate[idx + ivar];
+            }
+            // Loop over eigen vectors 
+            for(icvar = 0; icvar < 3; icvar ++){
+                if(eigenVals[icvar] == 0){
+                    continue;
+                }
+                // convert back to characteristic
+                dotProd = 0;
+                for(ivar = 0; ivar < 3; ivar++){
+                    dotProd += leftEigenVects[icvar*3 + ivar]*dpstate[idx + ivar];
+                }
+                
+                // add to interfaces
+                for(ivar = 0; ivar <3; ivar ++){
+                    qP[idx + ivar]  += ( 0.5 - halfdtdx*eigenVals[icvar])*rightEigenVects[ivar*3+icvar]*dotProd;
+                    qM[idx + ivar]  += (-0.5 - halfdtdx*eigenVals[icvar])*rightEigenVects[ivar*3+icvar]*dotProd;
+                    if((qP[idx + ivar] != qP[idx + ivar]) ||(qP[idx + ivar] != qP[idx + ivar]) ){
+                        printf("Error: Reconstruction gave NaN states\n");
+                        printf("ivar = %d\n", ivar);
+                        printf("dpstate = %.4e\n", dpstate[idx + ivar]);
+                        printf("qM = %.4e\n", qM[idx + ivar]);
+                        printf("qP = %.4e\n", qP[idx + ivar]);
+                        return -1;
+                    }
+                }
+            }
+            
+            max_eigenVal = fmax(eigenVals[0],0);
+            min_eigenVal = fmin(eigenVals[0],0);
+            for(ivar = IADVECT_START; ivar < IADVECT_END; ivar ++){
+                qP[idx + ivar] = pstate[idx + ivar] + (0.5 - max_eigenVal*halfdtdx)*dpstate[idx +ivar];
+                qM[idx + ivar] = pstate[idx + ivar] - (0.5 + min_eigenVal*halfdtdx)*dpstate[idx +ivar];
+            }
+
+        } else {  // PPM
+
+            for(ivar = 0; ivar< IADVECT_END; ivar++){
+                primRight = 0.5*(pstate[idxp + ivar] + pstate[idx  + ivar]) - (dpstate[idxp + ivar] + dpstate[idx  + ivar])/6.;
+                primLeft  = 0.5*(pstate[idx  + ivar] + pstate[idxm + ivar]) - (dpstate[idx  + ivar] + dpstate[idxm + ivar])/6.;
+            
+                // Ensure monoticity
+                if( (primRight - pstate[idx + ivar])*(pstate[idx + ivar] - primLeft) <= 0){
+                    primRight = pstate[idx + ivar];
+                    primLeft  = pstate[idx + ivar];
+                } 
+                if( 6*(primRight - primLeft)*(pstate[idx + ivar] - 0.5*(primLeft + primRight)) > pow((primRight - primLeft), 2.)){
+                    primLeft = 3*pstate[idx + ivar] - 2*primRight;
+                }
+                if( 6*(primRight - primLeft)*(pstate[idx + ivar] - 0.5*(primLeft + primRight)) < -pow((primRight - primLeft), 2.)){
+                    primRight = 3*pstate[idx + ivar] - 2*primLeft;
+                }
+
+                dPrim[ivar] = (primRight - primLeft);
+                prim6[ivar] = 6*(pstate[idx + ivar] - 0.5*(primRight + primLeft)); 
+                
+                if(ivar < 3){
+                    max_eigenVal = fmax(eigenVals[1],0);
+                    min_eigenVal = fmin(eigenVals[2],0);
+                } else {
+                    max_eigenVal = fmax(eigenVals[0],0);
+                    min_eigenVal = fmin(eigenVals[0],0);
+                }
+                
+                if(ivar < 3){
+                    qP[idx + ivar] = pstate[idx + ivar] + prim6[ivar]/12.;
+                    qM[idx + ivar] = pstate[idx + ivar] + prim6[ivar]/12.;
+                } else { 
+                    qP[idx + ivar] = primRight - halfdtdx*max_eigenVal*(dPrim[ivar] - (1 - max_eigenVal*twothirddtdx)*prim6[ivar]);
+                    qM[idx + ivar] = primLeft  + halfdtdx*min_eigenVal*(dPrim[ivar] + (1 - min_eigenVal*twothirddtdx)*prim6[ivar]);
+                }
+            }
+
+            /*
+             *
+             *  Characteristic traicing of Hydro variables (advected variables only have one eigenvalue, velocity)
+             *
+             */
+
+            
+            // Loop over eigen vectors 
+            for(icvar = 0; icvar < 3; icvar ++){
+                // Dot product between leftEigens and dPrim and prim6
+                dotProdA = 0;
+                dotProdB = 0;
+                for(ivar = 0; ivar < 3; ivar++){
+                    dotProdA += leftEigenVects[icvar*3 + ivar]*dPrim[ivar];
+                    dotProdB -= leftEigenVects[icvar*3 + ivar]*prim6[ivar];
+                }
+               
+                for(ivar = 0; ivar <3; ivar ++){
+                    qP[idx + ivar] += 0.5*(1.  - dtdx*eigenVals[icvar])*rightEigenVects[ivar*3+icvar]*dotProdA;
+                    qP[idx + ivar] += 0.25*(1. - 2.*dtdx*eigenVals[icvar] 
+                                               + fourthirddtdx_sq*pow(eigenVals[icvar],2.))*rightEigenVects[ivar*3+icvar]*dotProdB;
+                    
+                    qM[idx + ivar] += 0.5*(-1. - dtdx*eigenVals[icvar])*rightEigenVects[ivar*3+icvar]*dotProdA;
+                    qM[idx + ivar] += 0.25*(1. + 2.*dtdx*eigenVals[icvar] 
+                                               + fourthirddtdx_sq*pow(eigenVals[icvar],2.))*rightEigenVects[ivar*3+icvar]*dotProdB;
+                }
             }
         }
-#ifdef useDust
-#ifndef useDustDynamics
-        for(ivar = IDUST_START; ivar < nvar; ivar++){
-            // cell centered value
-            qi = pstate[idx + ivar];
-            // slope
-            dqix = dq[idx + ivar];
-            //source terms
-            Sqi  = -vel*dqix - dvelx*qi;
+    }    
+#ifdef useDustDynamics
+    ierr = reconstructStates_dust(qM, qP, dpstate, dt);
+    if(ierr < 0){
+        return ierr;
+    }
+#endif 
 
-            qM[idx+ivar] = qi - 0.5*dqix + 0.5*Sqi*dtdx;
-            qP[idx+ivar] = qi + 0.5*dqix + 0.5*Sqi*dtdx;
-            // Geometric source term same as for density
-            if(geometry == 1){
-                qM[idx + ivar] = qM[idx + ivar] - qi*vel*twooR * 0.5 * dt;
-                qP[idx + ivar] = qP[idx + ivar] - qi*vel*twooR * 0.5 * dt;
-            }
-        }
-#else 
-        int ierr = getRiemannStates_dust(dq, qP, qM, dt, dtdx, icell);
+
+    /*
+     *  
+     *  Geometric source terms
+     *
+     */
+    for(icell = 1; icell< NCELLS -1; icell++){
+        ierr = addGeometricSourceTerms_interfaces(icell,  qM, qP, dt);
         if(ierr < 0){
             return ierr;
-        }     
-#endif //useDynamicDust
-#endif //useDust
-#endif //useChemistry 
+        }
     }
-    return 1;  
+
+    return 1;
 }
-int getHLLCFlux(double *qL, double *qR, double*flux) {
+
+
+int getHLLCFlux(double *qL, double *qR, double *flux) {
     double rhoL, velL, preL, etotL, eL; 
     double rhoR, velR, preR, etotR, eR;
-    double rho0, vel0, pre0, var0, etot0;
+    double rho0, vel0, pre0, etot0;
     double velS, preS;
     double rhoSL, etotSL;
     double rhoSR, etotSR;
@@ -420,38 +723,28 @@ int getHLLCFlux(double *qL, double *qR, double*flux) {
     flux[0] = rho0*vel0;
     flux[1] = rho0*vel0*vel0+pre0;
     flux[2] = (etot0+pre0)*vel0;
+    /*
+    if(flux[0] != flux[0]){
+        printf("density flux is NaN \n");
+        printf("rhoL %.4e \n", rhoL);
+        printf("rhoSL %.4e \n", rhoSL);
+        printf("rhoSR %.4e \n", rhoSR);
+        printf("rhoR %.4e \n", rhoR);
+        printf("vel0 %.4e \n", vel0);
+        for(ivar = 0; ivar  < 3; ivar ++){
+            printf("ivar %d qL %.4e qR %.4e \n", ivar, qL[ivar], qR[ivar]);
+        }
+    }
+    */
     // Advected variables
-#ifdef useChemistry
-    for(ivar = ICHEM_START; ivar < ICHEM_END; ivar++){
-        if(SL > 0){
-            var0  = qL[ivar];
-        } else if(velS  > 0){
-            var0  = qL[ivar]*(SL-velL)/(SL-velS); ;
-        } else if(SR > 0){
-            var0  = qR[ivar]*(SR-velR)/(SR-velS);
+    for(ivar = IADVECT_START; ivar < IADVECT_END; ivar++){
+        if(flux[0]> 0){
+            flux[ivar] = qL[ivar]*flux[0];
         } else {
-            var0  = qR[ivar];
+            flux[ivar] = qR[ivar]*flux[0];
         }
-        flux[ivar] = var0*vel0;
     }
-#endif
-#ifdef useDust
-#ifndef useDustDynamics
-    for(ivar = IDUST_START; ivar < nvar; ivar++){
-        if(SL > 0){
-            var0  = qL[ivar];
-        } else if(velS  > 0){
-            var0  = qL[ivar]*(SL-velL)/(SL-velS); ;
-        } else if(SR > 0){
-            var0  = qR[ivar]*(SR-velR)/(SR-velS);
-        } else {
-            var0  = qR[ivar];
-        }
-
-        flux[ivar] = var0*vel0;
-    }
-#endif
-#endif
+    
     // transport of internal energy. Needed for eintswitch when Ekin ~ Etot
     // based on li 2008 "A Simple Dual Implementation to Track Pressure Accurately"
     // average pressure
@@ -501,22 +794,173 @@ int getFluxes(double *qM, double *qP, double *fluxes, double dt){
             fluxes[idx+ivar] = flux[ivar];
         }
     }
-    printf("%.4e, %.4e \n", fluxes[(NINTER -2)*nFluxVar], fluxes[(NINTER -1)*nFluxVar]); 
 #ifdef useDustDynamics
     ierr = getFluxes_dust(qM, qP, fluxes, dt);
 #endif
     return 1;
 }
 
+
+int printCellHydro(int icell, int allVars, double *fluxes, double *qP, double *qM, double dt){
+    int idx = icell*nvar, idxm = (icell - 1)*nvar, idxp = (icell + 1)*nvar;
+    int ifp = (icell - NGHOST + 1) * nFluxVar;
+    int ifn = (icell - NGHOST    ) * nFluxVar;
+    double rm, rp, surfm = 1, surfp = 1, vol;
+    double Ethermal, presStar;
+
+    printf("--------- icell %d ------ \n", icell);
+    if(geometry == 1){
+        rm = right_edge[icell - 1];
+        rp = right_edge[icell];
+        
+        surfm = rm*rm;
+        surfp = rp*rp;
+        
+        vol = (rp*rp*rp -rm*rm*rm)/3.;
+    } else {
+        vol = dr[icell];
+    }
+
+
+    if(hy_ethresh >= 0.0) {
+        // get initial internal temperature
+        // Ekin = 0.5*rho v**2 = 0.5 * momx*momx/rho
+        Ethermal = ustate[idx + 2] - 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
+        // predicted half step pressure of at cell center
+        presStar = (surfp*qP[idx + 2] + surfm*qM[idx + 2])/(surfm+surfp);
+        
+        Ethermal = Ethermal +            (fluxes[ifn + nvar]*surfm     - fluxes[ifp + nvar]*surfp)*dt/vol;
+        Ethermal = Ethermal + presStar * (fluxes[ifn + nvar + 1]*surfm - fluxes[ifp + nvar + 1]*surfp)*dt/vol;
+        Ethermal = fmax(Ethermal, 1e-40);
+    }
+
+    printf("Density: \n");
+    printf("\t u-1\tu\tu+1\n\t %.4e\t%.4e\t%.4e\n", ustate[idxm], ustate[idx], ustate[idxp]);
+    printf("\t f-1/2\tf+1/2 -> du\n\t %.4e\t%.4e\t%.4e\n", fluxes[ifn]*surfm, fluxes[ifp]*surfp, (fluxes[ifn]*surfm -  fluxes[ifp]*surfp)*dt/vol);
+    printf("Momentum :\n");
+    printf("\t u-1\tu\tu+1\n\t %.6e\t%.6e\t%.6e\n", ustate[idxm + 1], ustate[idx + 1], ustate[idxp + 1]);
+    printf("\t p-1\tp\tp+1\n\t %.6e\t%.6e\t%.6e\n", pstate[idxm + 1], pstate[idx + 1], pstate[idxp + 1]);
+    if(geometry == 1){
+        presStar = (surfp*qP[idx + 2] + surfm*qM[idx + 2])/(surfm+surfp);
+        double smom = 2.0*presStar*dr[icell]*rs[icell]/vol;
+        printf("\t f-1/2\tf+1/2 -> du\n\t %.6e\t%.6e\t%.6e\n", fluxes[ifn + 1]*surfm, fluxes[ifp + 1]*surfp, (fluxes[ifn + 1]*surfm - fluxes[ifp + 1]*surfp)*dt/vol+ smom*dt);
+        
+    } else {
+        printf("\t f-1/2\tf+1/2 -> du\n\t %.6e\t%.6e\t%.6e\n", fluxes[ifn + 1]*surfm, fluxes[ifp + 1]*surfp, (fluxes[ifn + 1]*surfm - fluxes[ifp + 1]*surfp)*dt/vol);
+    }
+    printf("Energy : \n");
+    printf("\t u-1\tu\tu+1\n\t %.4e\t%.4e\t%.4e\n", ustate[idxm + 2], ustate[idx + 2], ustate[idxp + 2]);
+    printf("\t p-1\tp\tp+1\n\t %.4e\t%.4e\t%.4e\n", pstate[idxm + 2], pstate[idx + 2], pstate[idxp + 2]);
+    printf("\t f-1/2\tf+1/2 -> du\n\t %.4e\t%.4e\t%.4e\n", fluxes[ifn + 2]*surfm, fluxes[ifp + 2]*surfp, (fluxes[ifn + 2]*surfm - fluxes[ifp + 2]*surfp)*dt/vol);
+
+    if(hy_ethresh >= 0.0) {
+        // get initial internal temperature
+        // Ekin = 0.5*rho v**2 = 0.5 * momx*momx/rho
+        Ethermal = ustate[idx + 2] - 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
+        // predicted half step pressure of at cell center
+        presStar = (surfp*qP[idx + 2] + surfm*qM[idx + 2])/(surfm+surfp);
+        
+        printf("Ethermal : \n");
+        printf("\t Ethermal, presStar\t %.4e\t%.4e \n", Ethermal, presStar);
+        printf("\t f-1/2\tf+1/2 -> du\n\t %.4e\t%.4e\t%.4e \n", (fluxes[ifn + nvar] + presStar*fluxes[ifn + nvar + 1])*surfm, (fluxes[ifp+nvar] + presStar*fluxes[ifp + nvar])*surfp, fluxes[ifn + nvar]*surfm - fluxes[ifp + nvar]*surfp + presStar*(fluxes[ifn + nvar + 1]*surfm - fluxes[ifp + nvar + 1]*surfp)*dt/vol);
+
+    }
+    if(ustate[idx] != ustate[idx]){
+        exit(0);
+    }
+    return 1;
+
+}
+
+
+
+
+int updateHydroVars(int icell, double *fluxes, double *uold, double *qM, double *qP, double surfm, double surfp, double vol, double dt){
+    int ifp, ifn, idx, ierr;
+    int ivar;
+    double unew[3];
+    double Ethermal, Ekinetic, presStar;
+    
+    ifp = (icell - NGHOST + 1)*nFluxVar;
+    ifn = (icell - NGHOST)*nFluxVar;
+    idx = icell*nvar;
+    
+    // Update Ethermal before anything changes
+    if(hy_ethresh>=0.0 && isothermal == 0){
+        // get initial internal temperature
+        // Ekin = 0.5*rho v**2 = 0.5 * momx*momx/rho
+        Ethermal = uold[2] - 0.5*uold[1] * uold[1] /uold[0];
+        // predicted half step pressure of at cell center
+        presStar = (surfp*qP[idx + 2] + surfm*qM[idx + 2])/(surfm+surfp);
+        
+        Ethermal = Ethermal +            (fluxes[ifn + nvar]*surfm     - fluxes[ifp + nvar]*surfp)*dt/vol;
+        Ethermal = Ethermal + presStar * (fluxes[ifn + nvar + 1]*surfm - fluxes[ifp + nvar + 1]*surfp)*dt/vol;
+        Ethermal = fmax(Ethermal, 1e-40);
+    }
+
+    // update density momentum and velocity
+    for(ivar = 0; ivar < 3; ivar++){
+        if(isothermal && ivar == 2){
+            continue;
+        }
+        unew[ivar] = ustate[idx+ivar]+(fluxes[ifn+ivar]*surfm-fluxes[ifp+ivar]*surfp)*dt/vol;
+        if(((ivar==0 || ivar==2) && unew[ivar]<0 ) || unew[ivar] != unew[ivar]){
+            printf("\nNEGATIVE IVAR = %d\n",ivar);
+            printf("dold=%.4e\n", uold[0]);
+            printf("dnew=%.4e\n", unew[0]);
+            printf("eold=%.4e\n", uold[2]);
+            printf("enew=%.4e\n", unew[2]);
+            printf("FL = %.4e FR= %.4e \n",fluxes[ifn+ivar],fluxes[ifp+ivar]);
+            printf("FL = %.4e FR= %.4e \n",surfm*fluxes[ifn+ivar]*dt/vol,surfp*fluxes[ifp+ivar]*dt/vol);
+            printf("icell = %d / %d\n",icell, NCELLS - NGHOST - 1); 
+            printf("rsm = %.4e rs = %.4e rsp = %.4e \n", rs[icell-1], rs[icell], rs[icell+1]);
+            printf("nvar = %d \n", nvar);
+            return -1;
+        }
+
+        ustate[idx + ivar] = unew[ivar];
+    }
+   
+    ierr = addHydroGeometricSourceTerms(icell, qM, qP, dt);
+    if(ierr < 0){
+        return ierr;
+    } 
+    // If kinetic energy dominates to the point where thermal energy is lost to machine precision, explicitly add that back in 
+    if(isothermal == 0){
+        Ekinetic = 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
+        if(ustate[idx+2] - Ekinetic < Ekinetic*hy_ethresh){
+            ustate[idx + 2] = Ekinetic + Ethermal;
+        } 
+    }
+    
+
+    return 1;
+}
+
+int updateAdvectedVars(int icell, double *fluxes, double *uold, double *qM, double *qP, double surfm, double surfp, double vol, double dt){
+    int ifp, ifn, idx;
+    int ivar;
+    
+    ifp = (icell - NGHOST + 1)*nFluxVar;
+    ifn = (icell - NGHOST)*nFluxVar;
+    idx = icell*nvar; 
+
+    for(ivar = IADVECT_START; ivar < IADVECT_END; ivar++){
+        // phi_new = (phi_old*rho_old + dmass_flux)/rho_new
+        ustate[idx+ivar] = (ustate[idx+ivar]*uold[0] + (fluxes[ifn+ivar]*surfm-fluxes[ifp+ivar]*surfp)*dt/vol)/ustate[idx];
+    }
+
+
+    return 1;
+}
+
 int doHydroStep(double dt){
     int ierr;
-    int icell, idx,ifp,ifn, ivar;
-    double dq[nvar*NCELLS], qM[nvar*NCELLS], qP[nvar*NCELLS];
-    double fluxes[nFluxVar*NINTER], unew, uold[nvar];
+    int icell, idx, ivar;
+    double qM[nvar*NCELLS], qP[nvar*NCELLS];
+    double fluxes[nFluxVar*NINTER], uold[nvar];
     double rm,rp, surfm = 1, surfp = 1, vol;
-    double smom;
-    double Ethermal, Ekinetic, presStar;
-    int idxm, idxp;
+    
     ierr = setBoundary();
     if(ierr < 0){
         printf("Error in setBoundary\n");
@@ -528,16 +972,11 @@ int doHydroStep(double dt){
         printf("Error in toPrimitive\n");
         return -1;
     }
-    if(useHydro > 0) { 
-        // calculate TVD Slope
-        ierr = getTVDSlopes(dq, dr, dt);
-        if(ierr < 0){
-            printf("Error in getTVDslopes\n");
-            return -1;
-        }
+    
 
+    if(useHydro > 0) { 
         // calculate left and right riemann states
-        ierr = getRiemannStates(dq, qP, qM, rs, dr, dt);
+        ierr = reconstructStates(qP, qM, dt);
         if(ierr < 0){
             printf("Error in getRiemannStates\n");
             return -1;
@@ -548,16 +987,16 @@ int doHydroStep(double dt){
             printf("Error in getFluxes\n");
             return -1;
         }
-
+#ifdef DEBUG_CELL
+        ierr = printCellHydro(DEBUG_CELL, 1, fluxes, qP,qM, dt);
+#endif
         // Update the conservative variables
         for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
             idx  = icell*nvar;
-            ifp = (icell - NGHOST + 1)*nFluxVar;
-            ifn = (icell - NGHOST)*nFluxVar;
 
             if(geometry == 1){
-                rm = rs[icell] - dr[icell]*0.5;
-                rp = rs[icell] + dr[icell]*0.5;
+                rm = right_edge[icell - 1];
+                rp = right_edge[icell];
                 
                 surfm = rm*rm;
                 surfp = rp*rp;
@@ -566,81 +1005,31 @@ int doHydroStep(double dt){
             } else {
                 vol = dr[icell];
             }
-            
-            if(hy_ethresh >= 0.0) {
-                // get initial internal temperature
-                // Ekin = 0.5*rho v**2 = 0.5 * momx*momx/rho
-                Ethermal = ustate[idx + 2] - 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
-                // predicted half step pressure of at cell center
-                presStar = (surfp*qP[idx + 2] + surfm*qM[idx + 2])/(surfm+surfp);
-                
-                Ethermal = Ethermal +            (fluxes[ifn + nvar]*surfm     - fluxes[ifp + nvar]*surfp)*dt/vol;
-                Ethermal = Ethermal + presStar * (fluxes[ifn + nvar + 1]*surfm - fluxes[ifp + nvar + 1]*surfp)*dt/vol;
-                Ethermal = fmax(Ethermal, 1e-40);
+
+            // Save old state 
+            for(ivar = 0;  ivar < nvar; ivar++){
+                uold[ivar] = ustate[idx + ivar];
             }
-            
-            for(ivar = 0; ivar<nvar; ivar++){
-                if(isothermal && ivar == 2){
-                    continue;
-                }
-                unew = ustate[idx+ivar]+(fluxes[ifn+ivar]*surfm-fluxes[ifp+ivar]*surfp)*dt/vol;
-#ifdef useDust
-                if((ivar==0 || ivar==2 || (ivar >= IDUST_START && (ivar - IDUST_START)%NdustVar == 0)) && unew<0 ){
-#else
-                if((ivar==0 || ivar==2) && unew<0 ){
+
+            ierr = updateHydroVars(icell, fluxes, uold, qM, qP, surfm, surfp, vol, dt);
+            if(ierr < 0){
+                return ierr;
+            }
+
+            ierr = updateAdvectedVars(icell, fluxes, uold, qM, qP, surfm, surfp, vol, dt);
+            if(ierr < 0){
+                return ierr;
+            }
+#ifdef useDustDynamics
+            ierr = updateDustVars(icell, fluxes, uold, surfm, surfp, vol, dt);
+            if(ierr < 0){
+                return ierr;
+            }
 #endif
-                    printf("\nNEGATIVE IVAR = %d\n",ivar);
-                    printf("unew=%.4e\n", unew);
-                    printf("u-1 = %.4e, u=%.4e , u+1=%.4e \n",ustate[(icell-1)*nvar+ivar], ustate[(icell)*nvar+ivar], ustate[(icell+1)*nvar+ivar]);
-                    printf("u-1 = %.4e, u=%.4e , u+1=%.4e \n",ustate[(icell-1)*nvar+ivar], ustate[idx+ivar], ustate[(icell+1)*nvar+ivar]);
-                    printf("FL = %.4e FR= %.4e \n",surfm*fluxes[ifn+ivar]*dt/vol,surfp*fluxes[ifp+ivar]*dt/vol);
-                    printf("icell = %d / %d\n",icell, NCELLS - NGHOST - 1); 
-                    return -1;
-                }
-                uold[ivar] = ustate[idx+ivar];
-                ustate[idx + ivar] = unew;
-            }
 
-            // add geometric source terms
-            if(geometry == 1){
-                // Adjusted pressure such that P = constant & u = 0 => static
-                // pstate still not updated so we can freely use
-                smom = (surfp - surfm) * pstate[idx + 2]/vol;
-                //smom = 2*qstate[idx + 2]/rs[icell];
-                ustate[idx + 1] = ustate[idx + 1] + smom*dt;
-            }
-             
-            if(hy_ethresh>=0.0 && isothermal == 0){
-                if(Ethermal < ustate[idx + 2]*hy_ethresh){
-                    Ekinetic = 0.5*ustate[idx + 1] * ustate[idx + 1] /ustate[idx];
-                    //printf("%.4e %.4e \n", Ethermal, Ekinetic);
-                    ustate[idx + 2] = Ekinetic + Ethermal;
-                }
-            }
-            
-            if(isothermal == 0) { 
-                if(ustate[idx + 2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
-                    idxm = (icell-1)*nvar;
-                    idxp = (icell+1)*nvar;
-                    printf("NEGATIVE INTERNAL ENERGY\n");
-                    printf("cell = %d \n", icell);
-                    printf("dens = %.4e %.4e %.4e \n", ustate[idxm], uold[0], ustate[idxp]); 
-                    printf("velx = %.4e %.4e %.4e \n", ustate[idxm+1]/ustate[idxm], uold[1]/uold[0], ustate[idxp+1]/ustate[idxp]); 
-                    printf("etot = %.4e %.4e %.4e \n", ustate[idxm+2], uold[2], ustate[idxp+2]); 
-                    printf("enew = %.4e %.4e %.4e \n", ustate[idxm+2], ustate[idx + 2], ustate[idxp+2]); 
-                    printf("ekin = %.4e\n",  0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
-                    printf("eint = %.4e\n", ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx]); 
-                    printf("rhoFluxes = %.4e \t %.4e\n", fluxes[ifn + 0]*surfm, fluxes[ifp+0]*surfp);
-                    printf("momFluxes = %.4e \t %.4e\n", fluxes[ifn + 1]*surfm, fluxes[ifp+1]*surfp);
-                    printf("eneFluxes = %.4e \t %.4e\n", fluxes[ifn + 2]*surfm, fluxes[ifp+2]*surfp);
-
-                    if(ustate[idx+2] - 0.5 * ustate[idx + 1] * ustate[idx + 1]/ustate[idx] < 0){
-                        return -1;
-                    }
-                }
-            }
         }
     }
+    // convert from their conserved forms to whatever was before
     fixState();
     return 1;
 }

@@ -153,8 +153,8 @@ int Hydro_output(){
 
 #ifdef useChemistry
         // Get abundances
-        xH2 = (ustate[idx+ICHEM_START+1]/dens) * mf_scale/2.0;
-        xHp = (ustate[idx+ICHEM_START+2]/dens) * mf_scale;
+        xH2 = ustate[idx+ICHEM_START+1] * mf_scale/2.0;
+        xHp = ustate[idx+ICHEM_START+2] * mf_scale;
  
         numd = dens*(1-xH2+xHp+abundHe)/mH/abar;
         

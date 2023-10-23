@@ -6,6 +6,7 @@
 #include <hydro.h>
 #include <radchem.h>
 #include <moshpit.h>
+#include <rtpars.h>
 #include <dustRadiation.h>
 #include <constantsAndUnits.h>
 #ifdef useDust
@@ -16,13 +17,18 @@
  */
 
 int dustCalcRadPress(double dt){
-    int idx, ibin, graphite;
-    double mass, Eabs_dust, dust_accel;
+    int idx, ibin, graphite, imax;
+    double mass, Eabs_dust, dust_accel, velmax;
+    velmax = -1e99;
     for(idx = 0; idx < NdustBins; idx++){
         
         // get index in the local arrays
         ibin = globalToLocalIndex(idx);
-        
+        // If no grains here, dont accelerate them
+        if(number[ibin] <=0){
+            continue;
+        } 
+
         if(ibin < isilicone){
             graphite = 1;
         } else {
@@ -40,12 +46,15 @@ int dustCalcRadPress(double dt){
         dust_accel = Eabs_dust/clght/mass;
         // update velocity
         velocity[ibin] = velocity[ibin] + dust_accel*dt;
+        if(velocity[ibin] > velmax){
+            velmax = velocity[ibin];
+            imax = idx;
+        }
     }
     return 1;
 
 }
 
-    
 
 /*
     DUST GAS DRAG
@@ -55,7 +64,10 @@ int dustCalcRadPress(double dt){
 
 double drag_coefficient(int iabin, int graphite, double rhoDust, double velDust, double rho, double vel, double cs){
     double rhoGrain;
-
+    // If there are no dust grains left in this bin, set drag constant to zero
+    if(rhoDust < 1e-40){
+        return 0;
+    }
     if(drag_mode == 0){
         if(graphite){
             rhoGrain = rho_c;
@@ -97,7 +109,6 @@ int set_drag_coefficient(double rho, double vel, double cs, double *dtmax){
 
         rhoDust = norm * getMass(number[ibin], slope[ibin], iabin);
         velDust = velocity[ibin];
-    
         // get the drag coefficient for the current dust species from the gas
         dragCoef[ibin] = drag_coefficient(iabin, graphite, rhoDust, velDust, rho, vel, cs);
         *dtmax = fmin(*dtmax, drag_dtmax_fact/dragCoef[ibin]);
@@ -209,7 +220,6 @@ int doDustGasDrag(double dt_step){
         vel = ustate[icell*nvar + 1]/rho;
         pre = (ustate[icell*nvar + 2]/rho - 0.5*vel*vel) * (adi-1);
         cs = sqrt(adi*pre);
-        
         // set dust arrays
         ierr = setBinsCell(icell, &Mtot);     
         
@@ -244,57 +254,106 @@ int doDustGasDrag(double dt_step){
     Paardekooper & Mellema 2006
 
  */
-int getRiemannStates_dust(double *dq, double *qP, double *qM, double dt, double dtdx, int icell){
-    int idust, idx;
-    double rho, slope, vel;
-    double drhox, dslopex, dvelx;
-    double Srho, Sslope, Svel;
-    double drp, drm, twooR;
 
-    for(idust = 0; idust < NdustBins; idust++){
-        idx = nvar*icell + IDUST_START + idust*NdustVar;
-        
-        // Get hydro variables
-        rho   = pstate[idx];
-        slope = pstate[idx+1];
-        vel   = pstate[idx+2];
-        
-        // Slopes
-        drhox   = dq[idx];
-        dslopex = dq[idx+1];
-        dvelx   = dq[idx+2];
 
-        //Source terms 
-        Srho   = -vel*drhox   - dvelx*rho;
-        Sslope = -vel*dslopex - dvelx*slope;
-        Svel   = -vel*dvelx;
 
-        // states on left and right interfaces
-        qM[idx]   = rho   - 0.5*drhox   + 0.5*Srho   * dtdx;
-        qM[idx+1] = slope - 0.5*dslopex + 0.5*Sslope * dtdx;
-        qM[idx+2] = vel   - 0.5*dvelx   + 0.5*Svel   * dtdx;
-                                              
-        qP[idx]   = rho   + 0.5*drhox   + 0.5*Srho   * dtdx;
-        qP[idx+1] = slope + 0.5*dslopex + 0.5*Sslope * dtdx;
-        qP[idx+2] = vel   + 0.5*dvelx   + 0.5*Svel   * dtdx;
-
-        //Geometric source terms if needed
-        if(geometry == 1){
-            drp= rs[icell] + dr[icell]/2;
-            drm= rs[icell] - dr[icell]/2;
-            twooR = 2/fabs(rs[icell]);
-
-            // add geometric source terms to left and right states
-            qM[idx]     = qM[idx]     - rho  *vel*twooR * 0.5*dt;
-            qM[idx + 1] = qM[idx + 1] - slope*vel*twooR * 0.5*dt;
+int addGeometricSourceTerms_interfaces_dust(int icell, double *qM, double *qP, double dt){
+    double Sgeo, twoOverR;
+    int idx, idust;
+    if(geometry == 0){
+        return 1;
+    }
+    twoOverR = 2./rs[icell];
+    for(icell = 1; icell < NCELLS -1; icell++){
+        for(idust = 0; idust < NdustBins; idust++){
+            idx = icell*nvar + IDUST_START + idust*NdustVar;
             
-            qP[idx]     = qP[idx]     - rho  *vel*twooR * 0.5*dt;
-            qP[idx + 1] = qP[idx + 1] - slope*vel*twooR * 0.5*dt;
+            //dust density    = -2rho_dust * v_dust / r
+            Sgeo = -pstate[idx]*pstate[idx+2]*twoOverR;
+            qP[idx] += 0.5*dt*Sgeo;
+            qM[idx] += 0.5*dt*Sgeo;
         }
     }
     return 1;
 }
 
+
+int getTVDslopes_dust(double *dpstate){
+    int ivar, idust, idx, idxp, idxm, icell;
+    double dminus, dplus;
+    for(icell = 1; icell < NCELLS -1; icell++){
+        for(idust = 0; idust < NdustBins; idust++){
+            for(ivar=0; ivar < NdustVar; ivar++){
+                idx  = icell*nvar + IDUST_START + idust*NdustVar + ivar;
+                idxp = (icell+1)*nvar + IDUST_START + idust*NdustVar + ivar;
+                idxm = (icell-1)*nvar + IDUST_START + idust*NdustVar + ivar;
+                
+                dplus   = (pstate[idxp] - pstate[idx] );
+                dminus  = (pstate[idx]  - pstate[idxm]);
+
+                dpstate[idx] = vanLeer(dminus, dplus); 
+            }
+        }
+    }
+    return 1;
+}
+
+
+
+int reconstructStates_dust(double *qM, double *qP, double *dpstate, double dt){
+    int ivar, idust, idx, idxm, idxp, icell;
+    double vel_dust;
+    double dtdx, halfdtdx, twothirddtdx, fourthirddtdx_sq;
+    double dPrim, prim6, primLeft, primRight, dminusPrim, dplusPrim, min_eigenVal, max_eigenVal;
+    for(icell = 1; icell < NCELLS -1; icell++){
+        dtdx = dt/dr[icell];
+        halfdtdx = 0.5*dtdx;
+        twothirddtdx = 2./3.*dtdx;
+        fourthirddtdx_sq = 4./3.*pow(dtdx,2.);
+        for(idust = 0; idust < NdustBins; idust++){
+            idx  = icell*nvar + IDUST_START + idust*NdustVar;
+            idxp = (icell+1)*nvar + IDUST_START + idust*NdustVar;
+            idxm = (icell-1)*nvar + IDUST_START + idust*NdustVar;
+                
+
+            vel_dust = pstate[idx + 2]; 
+            max_eigenVal = fmax(vel_dust,0);
+            min_eigenVal = fmin(vel_dust,0);
+            for(ivar=0; ivar < NdustVar; ivar++){
+                if(interpolator == 0){ //Piecewise linear muscle
+                    qP[idx + ivar] = pstate[idx + ivar] + (0.5 - max_eigenVal*halfdtdx)*dpstate[idx + ivar];
+                    qM[idx + ivar] = pstate[idx + ivar] - (0.5 + min_eigenVal*halfdtdx)*dpstate[idx + ivar];
+                } else {
+                    primRight = 0.5*(pstate[idxp + ivar] + pstate[idx  + ivar]) - (dpstate[idxp + ivar] + dpstate[idx  + ivar])/6.;
+                    primLeft  = 0.5*(pstate[idx  + ivar] + pstate[idxm + ivar]) - (dpstate[idx  + ivar] + dpstate[idxm + ivar])/6.;
+
+                    primRight = fmax(fmin(pstate[idx + ivar], pstate[idxp + ivar]), fmin(fmax(pstate[idx + ivar], pstate[idxp + ivar]), primRight));
+                    primLeft  = fmax(fmin(pstate[idx + ivar], pstate[idxm + ivar]), fmin(fmax(pstate[idx + ivar], pstate[idxm + ivar]), primLeft));                    
+                    
+                    // Ensure monoticity
+                    if( (primRight - pstate[idx + ivar])*(pstate[idx + ivar] - primLeft) <= 0){
+                        primRight = pstate[idx + ivar];
+                        primLeft  = pstate[idx + ivar];
+                    }
+                    if( 6*(primRight - primLeft)*(pstate[idx + ivar] - 0.5*(primLeft + primRight)) > pow((primRight - primLeft), 2.)){
+                        primLeft = 3*pstate[idx + ivar] - 2*primRight;
+                    }
+                    if( 6*(primRight - primLeft)*(pstate[idx + ivar] - 0.5*(primLeft + primRight)) < -pow((primRight - primLeft), 2.)){
+                        primRight = 3*pstate[idx + ivar] - 2*primLeft;
+                    }
+
+                    dPrim = (primRight - primLeft);
+                    prim6 = 6*(pstate[idx + ivar] - 0.5*(primRight + primLeft));
+
+
+                    qP[idx + ivar] = primRight - halfdtdx*max_eigenVal*(dPrim - (1 - max_eigenVal*twothirddtdx)*prim6);
+                    qM[idx + ivar] = primLeft  + halfdtdx*min_eigenVal*(dPrim + (1 + min_eigenVal*twothirddtdx)*prim6);
+                }
+            }  // loop over dust variable
+        } // loop over dust species
+    } // loop over cells
+    return 1;
+}
 
 double limiter(double a, double b){
     return fmax(0, fmin(roe_p * a, fmax(b, fmin(a, roe_p * b)))) + \
@@ -459,12 +518,13 @@ int getAdvectionFlux(double *qL, double *qR, double *flux){
         if( velS > 0){
             flux[idx]     = velL*rhoL;
             flux[idx + 1] = velL*slopeL;
-            flux[idx + 2] = velL*rhoL*velL; 
+            flux[idx + 2] = flux[idx]*velL; 
         } else {
             flux[idx]     = velR*rhoR;
             flux[idx + 1] = velR*slopeR;
-            flux[idx + 2] = velR*rhoR*velR; 
+            flux[idx + 2] = flux[idx]*velR; 
         } 
+
 
     }
     return 1;
@@ -513,6 +573,7 @@ int getCoefficients(double *qL, double *qR, double *as){
     }
     return 1;
 }
+
 int getFluxes_dust(double *qM, double *qP, double *fluxes, double dt){
     int iinter, idxmm, idxm, idx, idxp, idxpp, ivar, ierr;
     double dtdxl, dtdxr;
@@ -552,14 +613,26 @@ int getFluxes_dust(double *qM, double *qP, double *fluxes, double dt){
             return -1;
         }
         // save fluxes
-        if(iinter == NINTER/4){
-            printf("%.4e %.4e %.4e\n", flux[0], flux[1], flux[2]);
-        }
         idx = iinter*nFluxVar + IDUST_START;
         for(ivar = 0; ivar < NdustBins*NdustVar; ivar++){
             fluxes[idx+ivar] = flux[ivar];
         }
     }
     return 1;
+}
+
+
+int updateDustVars(int icell, double *fluxes, double *uold, double surfm, double surfp, double vol, double dt){
+    int idust, ivar, ifp, ifn, idx;
+    
+    for(idust = 0; idust < NdustBins; idust++){
+        idx = icell*nvar + IDUST_START + idust*NdustVar;
+        ifp = (icell - NGHOST + 1)*nFluxVar + IDUST_START + idust*NdustVar;
+        ifn = (icell - NGHOST    )*nFluxVar + IDUST_START + idust*NdustVar;
+        ustate[idx] = ustate[idx] + (fluxes[ifn]*surfm - fluxes[ifp]*surfp)*dt/vol;
+        ustate[idx+1] = ustate[idx+1] + (fluxes[ifn+1]*surfm - fluxes[ifp+1]*surfp)*dt/vol;
+        ustate[idx+2] = ustate[idx+2] + (fluxes[ifn+2]*surfm - fluxes[ifp+2]*surfp)*dt/vol;
+    }
+    return 1;    
 }
 #endif

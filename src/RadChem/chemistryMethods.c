@@ -8,6 +8,7 @@
 #include <hydro.h>
 #include <radchem.h>
 #include <cgeneral.h>
+#include <rtpars.h>
 #ifdef useDust
     #include <dust.h>
     #include <dustRadiation.h>
@@ -30,9 +31,8 @@ int doChemistryStep(double dt, double *dt_chem){
     double dt_temp, sum_abs_est, sum_abs;
 #ifdef useDust
     double rhoDust, rhoDustNew, rpars[24];
-    int ipars[2];
+    int ipars[2], idust,ibin;
 #endif
-
 
     getrealchemistrypar("ch_max_ion_frac_change", &maxIon_Change);
     // If we want radiation 
@@ -42,7 +42,6 @@ int doChemistryStep(double dt, double *dt_chem){
     sum_abs = 0;
     sum_abs_est = 0;
     for(icell = NGHOST; icell < NCELLS-NGHOST; icell++){
-        //printf("%d, %.4e \n", icell, rs[icell]);
         idx  = icell*nvar;
         // Get cell state
         rho  = ustate[idx];
@@ -52,9 +51,9 @@ int doChemistryStep(double dt, double *dt_chem){
         pres = eint*(adi-1);
          
         // Get abundances
-        xH  = (ustate[idx+ICHEM_START]/rho  )* mf_scale;
-        xH2 = (ustate[idx+ICHEM_START+1]/rho) * mf_scale/2.0;
-        xHp = (ustate[idx+ICHEM_START+2]/rho) * mf_scale;
+        xH  = (ustate[idx+ICHEM_START]  ) * mf_scale;
+        xH2 = (ustate[idx+ICHEM_START+1]) * mf_scale/2.0;
+        xHp = (ustate[idx+ICHEM_START+2]) * mf_scale;
  
         numd = rho/ch_mH/abar;
         Temp = pres/(numd*ch_kb*(1-xH2+xHp+abundHe));
@@ -66,8 +65,8 @@ int doChemistryStep(double dt, double *dt_chem){
             xHp = xHp/abhtot;
         }
 
-        xCO = (ustate[idx+ICHEM_START+3]/rho) * mf_scale/ch_muC;
-        xCp = (ustate[idx+ICHEM_START+4]/rho) * mf_scale/ch_muC;
+        xCO = (ustate[idx+ICHEM_START+3]) * mf_scale/ch_muC;
+        xCp = (ustate[idx+ICHEM_START+4]) * mf_scale/ch_muC;
         abctot = xCO + xCp;
         if(abctot != abundC){
             xCO = xCO * abundC / abctot;
@@ -115,12 +114,30 @@ int doChemistryStep(double dt, double *dt_chem){
         
         // sound speed in cell
         rpars[6] = sqrt(pres * adi);
-        
+#ifdef growthUpdateVelocities 
+        //if(icell == 4){
+        //    verbose = 1;
+        //    printf("vel %.8e\n", vel);
+        //}
+#endif
         ierr = dustCell(rpars, ipars, dt);
-        
         if(ierr < 0) {
             return -1; 
         }
+
+#ifdef growthUpdateVelocities   
+        // If we calculate the dust and gas velocity in the growth module, get the updated gas velocity velocity
+        vel = rpars[4];
+        //if(icell == 4){
+        //    printf("vel %.8e\n", vel);
+        //}
+#else
+        // Otherwise update dust velocity here 
+        ierr = dustCalcRadPress(dt);
+        if(ierr < 0) {
+            return -1; 
+        }
+#endif 
         if(outputDust){
             // If we want to output this step, we need to write the dadt's of the dust here
             ierr = Dust_outputCell_dadt(icell, dr[icell]);
@@ -133,10 +150,6 @@ int doChemistryStep(double dt, double *dt_chem){
             return -1; 
         }
 #endif
-        if(noChemistry == 1){
-            continue;
-        }
-        //exit(0);
         // get absorption variables
         //make into flux. take value at centre of cell
         if(geometry == 1){
@@ -159,7 +172,6 @@ int doChemistryStep(double dt, double *dt_chem){
         
         Habs_est  = absData[10];
         H2abs_est = absData[11];  
-
         // Get dust temperature for chemistry
         // Is not advected, but its set to equilibrium anyways, just need initial guess
 
@@ -181,27 +193,34 @@ int doChemistryStep(double dt, double *dt_chem){
         divv     = 0;
         redshift = 0;
         tphoto   = 0;
-        // TODO  make this interface more general... this might be comiler specific
-        evolve_abundances_(&dt, &dr[icell], &numd, &divv, &energy, &redshift, 
-                           non_eq_species, &fshield_H2, &fshield_CO, &Av_mean, 
-                           &chi_mean, &Tdust, &phih, &hvphih, &phih2, &hvphih2, &kUV,
-                           &EtotPe, &tphoto, &NionH0, &NdisH2, &DustEabs);  
+        if(noChemistry == 0){
+            // TODO  make this interface more general... this might be comiler specific
+            evolve_abundances_(&dt, &dr[icell], &numd, &divv, &energy, &redshift, 
+                               non_eq_species, &fshield_H2, &fshield_CO, &Av_mean, 
+                               &chi_mean, &Tdust, &phih, &hvphih, &phih2, &hvphih2, &kUV,
+                               &EtotPe, &tphoto, &NionH0, &NdisH2, &DustEabs);  
     
-        //printf(" %d : %.4e, %.4e, %4e %.4e \n", icell, eint, energy, (energy - eint)/eint, Tdust);
-        sum_abs += NionH0*volcell;
-        sum_abs_est += Habs_est; 
-
-        if(useRadiationPressure > 0){    
-            vel = vel + DustMom/(volcell*rho);
-
-            NdisH2 = NdisH2 *  volcell ;
-            NionH0 = NionH0 *  volcell ;
-            if(H2abs_est > 1){
-            vel = vel + NdisH2/H2abs_est * H2Mom/(rho*volcell);
+            //printf(" %d : %.4e, %.4e, %4e %.4e \n", icell, eint, energy, (energy - eint)/eint, Tdust);
+            sum_abs += NionH0*volcell;
+            sum_abs_est += Habs_est; 
+        //if( fabs(NionH0*volcell - Habs_est)/(NionH0*volcell) > 0.1) {
+        //    printf("%d NionH0 %.4e %.4e   %.4e\n", icell, NionH0*volcell/dt, Habs_est/dt, xH);
+        //}
+#ifndef growthUpdateVelocities
+            if(useRadiationPressure > 0){
+#ifndef useDustDynamics   
+                vel = vel + DustMom/(volcell*rho);
+#endif
+                NdisH2 = NdisH2 *  volcell ;
+                NionH0 = NionH0 *  volcell ;
+                if(H2abs_est > 1){
+                    vel = vel + NdisH2/H2abs_est * H2Mom/(rho*volcell);
+                }
+                if(Habs_est > 1){
+                    vel = vel + NionH0/Habs_est * HMom/(rho*volcell);
+                }
             }
-            if(Habs_est > 1){
-            vel = vel + NionH0/Habs_est * HMom/(rho*volcell);
-            }
+#endif
         }
         etot = energy + 0.5*rho*vel*vel;
         ustate[idx+1] = rho*vel;
@@ -216,13 +235,12 @@ int doChemistryStep(double dt, double *dt_chem){
             }
         } 
         // Unpack results of chemistry integration
-        ustate[idx+ICHEM_START]   = rho*(1-2*non_eq_species[0]-non_eq_species[1])/mf_scale;
-        ustate[idx+ICHEM_START+1] = rho*non_eq_species[0]*2.0/mf_scale;
-        ustate[idx+ICHEM_START+2] = rho*non_eq_species[1]/mf_scale;
-        ustate[idx+ICHEM_START+3] = rho*non_eq_species[2]*ch_muC/mf_scale;
-        ustate[idx+ICHEM_START+4] = rho*(abundC - non_eq_species[2])*ch_muC/mf_scale;
+        ustate[idx+ICHEM_START]   = (1-2*non_eq_species[0]-non_eq_species[1])/mf_scale;
+        ustate[idx+ICHEM_START+1] = non_eq_species[0]*2.0/mf_scale;
+        ustate[idx+ICHEM_START+2] = non_eq_species[1]/mf_scale;
+        ustate[idx+ICHEM_START+3] = non_eq_species[2]*ch_muC/mf_scale;
+        ustate[idx+ICHEM_START+4] = (abundC - non_eq_species[2])*ch_muC/mf_scale;
     }
-
     return 1;
 }
 

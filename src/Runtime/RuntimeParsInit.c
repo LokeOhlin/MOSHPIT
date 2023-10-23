@@ -14,7 +14,7 @@ int_list_t *RTIPars = NULL;
 
 double t0, tend, dt_init, dt_max, timeOut;
 int imax;
-
+int verbose;
 // set default parameters
 int setRuntimePars(){
     RTDPars = (real_list_t *) malloc(nrealRTPars * sizeof(real_list_t));
@@ -76,6 +76,7 @@ int initRuntimePars(){
     getrealrtpar("dt_init", &dt_init);
     getrealrtpar("dt_max", &dt_max);
     getintegerrtpar("imax", &imax);
+    verbose = 0;
     return 1;
 }
 

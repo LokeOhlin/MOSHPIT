@@ -3,8 +3,14 @@
 #define HYDRO
 #include <hydro.h>
 
+// Number of ghosts per side
+#define NGHOST 4
+
 // How large does our arrays have to be?
 // eg how many variables and species
+#define IHYDRO_START 0
+#define IHYDRO_END 3
+#define IADVECT_START 3
 #ifdef useChemistry
     #define ICHEM_START  3
     #define ICHEM_END  8
@@ -26,10 +32,20 @@
     #else
         // 6 new variables: H, H2, Hp, CO, Cp, Tdust
         #define nvar   9
+        #define IADVECT_END ICHEM_END
+    #endif
+    #if defined useDust 
+        #if defined useDustDynamics
+            #define IADVECT_END IDUST_START
+        #else
+            #define IADVECT_END nvar
+        #endif
     #endif
 #else
+    #define ICHEM_START  3
     #define ICHEM_END 3
     #define nvar 3
+    #define IADVECT_END   3
 #endif
 #define nFluxVar (nvar + 2)
 int toPrimitive();
@@ -40,16 +56,18 @@ int setHydroPars();
 int checkHydroPars(char *name, char *value);
 int initHydro();
 int init_domain();
+double vanLeer(double a, double b);
 
 extern int useHydro;
 // ISOTHEMRMAL
 extern int isothermal;
 extern double cs_init;
 // GRID GEOMETRY
-extern int NGHOST; 
 extern int NCELLS; 
 extern int NINTER;
 extern int geometry;
+// INTERPOLATION
+extern int interpolator;
 
 // BOUNDARY CONDITIONS
 extern int left_bound;
@@ -67,6 +85,7 @@ extern double roe_p;
 extern double *ustate;
 extern double *pstate;
 extern double *rs;
+extern double *right_edge;
 extern double *vol;
 extern double *dr;
 
@@ -79,6 +98,3 @@ extern int_list_t *hydroIPars;
 extern real_list_t *hydroDPars;
 #endif
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif

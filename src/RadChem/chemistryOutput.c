@@ -83,12 +83,12 @@ int RadChem_output(){
         
         dens = ustate[idx];
 
-        xHI = ustate[idx+ICHEM_START  ]/dens * mf_scale;
-        xH2 = ustate[idx+ICHEM_START+1]/dens * mf_scale/2.0;
-        xHp = ustate[idx+ICHEM_START+2]/dens * mf_scale;
+        xHI = ustate[idx+ICHEM_START  ];
+        xH2 = ustate[idx+ICHEM_START+1]/2.0;
+        xHp = ustate[idx+ICHEM_START+2];
 
-        xCO = ustate[idx+ICHEM_START+3]/dens * mf_scale/ch_muC;
-        xCp = ustate[idx+ICHEM_START+4]/dens * mf_scale/ch_muC;
+        xCO = ustate[idx+ICHEM_START+3];
+        xCp = ustate[idx+ICHEM_START+4];
         
         chemBuff[(icell - NGHOST) * 5    ] = xHI;
         chemBuff[(icell - NGHOST) * 5 + 1] = xH2;

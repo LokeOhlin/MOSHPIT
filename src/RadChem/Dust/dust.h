@@ -64,13 +64,17 @@ int Dust_output();
 
 // Methods for the dust velocity
 int dustCalcGasDrag(double rho, double *vel, double cs, double dt);
-int dustCalcRadPres(double dt);
+int dustCalcRadPress(double dt);
 int doDustGasDrag(double dt);
-
+int doDustGasDrag_cell(double rho, double *vel, double cs, double subcycle_step);
 // Methods for dust transport
+int addGeometricSourceTerms_interfaces_dust(int icell, double *qM, double *qP, double dt);
+int getTVDslopes_dust(double *dpstate);
+int reconstructStates_dust(double *qM, double *qP, double *dpstate, double dt);
 int getRiemannStates_dust(double *dq, double *qP, double *qM, double dt, double dtdx, int icell);
 int getRoeFlux_dust(double *qL, double *qR, double *am, double *a0, double *ap, double *UL, double *UR, double dxdtl, double dxdtr, double *flux);
 int getFluxes_dust(double *qM, double *qP, double *fluxes, double dt);
+int updateDustVars(int icell, double *fluxes, double *uold, double surfm, double surfp, double vol, double dt);
 #endif
 // Scratch arrays
 extern double *dadt, *dadt_fixed, *number, *slope, *velocity, *Mnew, *Nnew, *Snew, *vnew, *dust_vrel, *dragCoef;
