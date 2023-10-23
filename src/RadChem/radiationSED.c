@@ -73,7 +73,7 @@ double tab_ss[12] = {0.09e-18, 1.15e-18, 3.0e-18,
 double get_sigmaH2(double ephot){
     int iEbin;
     if(ephot < ionEH2){
-        return sigmaLW; //if below direct dissociation, just use lyman warner
+        return 0; //if below direct dissociation, return 0
     }
     if(ephot > tab_es[11]){
         return tab_ss[11] * pow(ephot/tab_es[11], -3);
@@ -84,6 +84,19 @@ double get_sigmaH2(double ephot){
         }
     }
     return 0;
+}
+
+double get_sigmaH(double ephot){
+    int iEbin;
+    if(ephot < ionE){
+        return 0;
+    }
+#ifdef FIXEDSIGMAHI
+    printf("%.4e\n", FIXEDSIGMAHI);
+    return FIXEDSIGMAHI;
+#else
+    return sigmaH0 * pow(ephot/ionE,-3.);
+#endif
 }
 
 void setFromStellarModel(){
@@ -106,7 +119,11 @@ void setFromStellarModel(){
 
     Nphots[iE136]    = Nion0; 
     aveEphots[iE136] = Eion;
+#ifdef FIXEDSIGMAHI
+    sionH [0] = FIXEDSIGMAHI;
+#else
     sionH [0] = sion;
+#endif
     sionH2[0] = sigmaLW;
     
     Eion  = Eion - ionE;
@@ -134,7 +151,11 @@ void setFromStellarModel(){
         getsourceemission_(&Teff, &EbinEdges[iEbin + iE152], &EbinEdges[iEbin + 1 + iE152], &sigma0_e, &Eion, &NionH20, &sion);
         NionH20 = NionH20*4.0*M_PI*RstarSQ;
         Nphots[iEbin + iE152] = NionH20;
+#ifdef FIXEDSIGMAHI
+        sionH[iEbin + 1] = FIXEDSIGMAHI;
+#else
         sionH[iEbin + 1] = sion*4.0*M_PI*RstarSQ/NionH20;
+#endif
         aveEphots[iEbin + iE152] = Eion; 
         EionH[iEbin + 1] = Eion - ionE;
 
@@ -169,7 +190,6 @@ void setFromFile(){
     double numphots, eave;
     iEbin = 0;
     nFileBins = 0;
-
     while(fgets(line, 128, fptr) != NULL){
         numphots_s = strtok(line, delimiter);
         if(numphots_s == NULL){
@@ -197,7 +217,7 @@ void setFromFile(){
             printf("         Bin %d with Emin = %.4e, Emax = %.4e was given an average photon energy of %.4e \n", iEbin, EbinEdges[iEbin], EbinEdges[iEbin + 1], eave);
         }
         if(iEbin >= iE136){
-            sionH [iEbin - iE136] = sigma0 * (eave/ionE);
+            sionH [iEbin - iE136] = get_sigmaH(eave);
             sionH2[iEbin - iE136] = get_sigmaH2(eave);
         
             EionH [iEbin - iE136] = aveEphots[iEbin] - ionE;
