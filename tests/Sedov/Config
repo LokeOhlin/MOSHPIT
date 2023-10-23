@@ -1,0 +1,36 @@
+## Dust model parameters
+#
+
+## overaching flag
+#FLAGS += -DuseDust
+
+## total number of dust bins to be distributed across dust species 
+#FLAGS += -DNdustBins=1
+
+## use relative velocity between dust and gas when calculating sputtering
+#FLAGS += -DsputteringUseVelocities
+
+## Evolve dust velocites (drag and radiation pressure) inside dust growth method
+#FLAGS += -DgrowthUpdateVelocitites
+## Dynamically evolve dust and gas seperatly (multi fluid approach)
+#FLAGS += -DuseDustDynamics
+
+#FLAGS += -DDEBUG_CELL=4
+
+## Chemistry parameters
+#
+
+## overarching flag
+#FLAGS += -DuseChemistry
+
+## save the radiation fluxes of each cell in the output files
+#FLAGS += -DsavePhotonFluxes
+
+##simplified network for only using atomic hydrogen
+#FLAGS += -DTESTATOMONLY
+
+##change used values and function to match PDR tests
+#FLAGS += -DPDRtestChem 
+
+##Fortran FLAGS
+FFLAGS += -DCHEMISTRYNETWORK=5

@@ -1,0 +1,29 @@
+useHydro = 1
+isothermal = 0
+gamma = 1.6666667
+dtOut = 0.01
+imax = -1
+t0 = 0
+nstepOut = -1
+tend = 0.1
+dt_init = 1e-6
+dt_max  = 1e-2
+
+interpolator = 1
+logspace_cells = 0
+geometry = 1
+rR = 0.5
+rL = 0.0
+ncells = 128
+left_bound = 0
+right_bound = 1
+
+setup = 2
+init_numd = 0
+ESN_init = 1
+dens_init = 1
+temp_init  = 2.9116720385325756e-18
+velo_init  = 0
+ch_dust_to_gas_ratio = 1
+
+
